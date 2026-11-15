@@ -36,9 +36,26 @@ class DailyForecast {
   });
 }
 
+class CityLocation {
+  final String name;
+  final String country;
+  final String admin1;
+  final double lat;
+  final double lon;
+
+  CityLocation({
+    required this.name,
+    required this.country,
+    required this.admin1,
+    required this.lat,
+    required this.lon,
+  });
+}
+
 // ================== SERVICE ==================
 class WeatherService {
   static const String _baseUrl = 'https://api.open-meteo.com/v1/forecast';
+  static const String _geoUrl = 'https://geocoding-api.open-meteo.com/v1/search';
 
   Future<List<DailyForecast>> fetchWeather({
     required double latitude,
@@ -89,6 +106,34 @@ class WeatherService {
       ));
     }
     return forecasts;
+  }
+
+  // FITUR BARU: Pencarian Kota Global (bisa multiple results)
+  Future<List<CityLocation>> searchGlobalCity(String query) async {
+    final uri = Uri.parse(_geoUrl).replace(queryParameters: {
+      'name': query,
+      'count': '5',
+      'language': 'id',
+      'format': 'json',
+    });
+    try {
+      final response = await http.get(uri);
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data['results'] != null && data['results'].isNotEmpty) {
+          return (data['results'] as List).map((e) {
+            return CityLocation(
+              name: e['name'] ?? 'Unknown',
+              country: e['country'] ?? '',
+              admin1: e['admin1'] ?? '',
+              lat: (e['latitude'] as num).toDouble(),
+              lon: (e['longitude'] as num).toDouble(),
+            );
+          }).toList();
+        }
+      }
+    } catch (_) {}
+    return [];
   }
 }
 
@@ -161,9 +206,14 @@ class _WeatherScreenState extends State<WeatherScreen> {
   bool _loading = true;
   String? _error;
   String _selectedModel = 'best_match';
+  
+  String _displayCityName = 'Jakarta, Indonesia';
+  double _latitude = -6.2088;
+  double _longitude = 106.8456;
 
-  static const double _latitude = -6.2088;
-  static const double _longitude = 106.8456;
+  final TextEditingController _searchController = TextEditingController();
+  List<CityLocation> _searchResults = [];
+  bool _isSearching = false;
 
   @override
   void initState() {
@@ -192,6 +242,34 @@ class _WeatherScreenState extends State<WeatherScreen> {
     _loadWeather();
   }
 
+  // Fungsi saat user ngetik di kolom search
+  Future<void> _onSearchChanged(String query) async {
+    if (query.trim().length < 3) {
+      setState(() => _searchResults = []);
+      return;
+    }
+    setState(() => _isSearching = true);
+    final results = await _service.searchGlobalCity(query);
+    if (!mounted) return;
+    setState(() {
+      _searchResults = results;
+      _isSearching = false;
+    });
+  }
+
+  // Fungsi saat user milih kota dari daftar
+  void _selectCity(CityLocation city) {
+    FocusScope.of(context).unfocus(); // Tutup keyboard
+    setState(() {
+      _latitude = city.lat;
+      _longitude = city.lon;
+      _displayCityName = '${city.name}, ${city.country}';
+      _searchResults = [];
+      _searchController.clear();
+    });
+    _loadWeather();
+  }
+
   @override
   Widget build(BuildContext context) {
     final today = (_weather != null && _weather!.isNotEmpty) ? _weather!.first : null;
@@ -200,11 +278,77 @@ class _WeatherScreenState extends State<WeatherScreen> {
     return Scaffold(
       backgroundColor: bgColor,
       body: SafeArea(
-        child: _loading
-            ? const Center(child: CircularProgressIndicator(color: Colors.white))
-            : _error != null
-                ? _buildError()
-                : _buildContent(today!),
+        child: Column(
+          children: [
+            // ================= SEARCH BAR AREA =================
+            Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                children: [
+                  Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: TextField(
+                      controller: _searchController,
+                      onChanged: _onSearchChanged,
+                      style: const TextStyle(color: Colors.white),
+                      decoration: InputDecoration(
+                        hintText: 'Cari kota di seluruh dunia...',
+                        hintStyle: const TextStyle(color: Colors.white70),
+                        border: InputBorder.none,
+                        prefixIcon: const Icon(Icons.search, color: Colors.white),
+                        suffixIcon: _isSearching 
+                            ? const Padding(
+                                padding: EdgeInsets.all(12.0),
+                                child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)),
+                              )
+                            : null,
+                      ),
+                    ),
+                  ),
+                  
+                  // Dropdown hasil pencarian
+                  if (_searchResults.isNotEmpty)
+                    Container(
+                      margin: const EdgeInsets.only(top: 8),
+                      constraints: const BoxConstraints(maxHeight: 250),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 10)],
+                      ),
+                      child: ListView.builder(
+                        shrinkWrap: true,
+                        itemCount: _searchResults.length,
+                        itemBuilder: (context, index) {
+                          final city = _searchResults[index];
+                          final subtitle = [city.admin1, city.country].where((e) => e.isNotEmpty).join(', ');
+                          return ListTile(
+                            leading: const Icon(Icons.location_on, color: Color(0xFF4A90E2)),
+                            title: Text(city.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+                            subtitle: Text(subtitle),
+                            onTap: () => _selectCity(city),
+                          );
+                        },
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            // ====================================================
+
+            // ================= KONTEN CUACA =====================
+            Expanded(
+              child: _loading
+                  ? const Center(child: CircularProgressIndicator(color: Colors.white))
+                  : _error != null
+                      ? _buildError()
+                      : _buildContent(today!),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -232,18 +376,18 @@ class _WeatherScreenState extends State<WeatherScreen> {
       onRefresh: _loadWeather,
       child: SingleChildScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Column(
+                Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('WeatherFit', style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)),
-                    Text('Jakarta, Indonesia', style: TextStyle(color: Colors.white70, fontSize: 14)),
+                    const Text('WeatherFit', style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)),
+                    Text(_displayCityName, style: const TextStyle(color: Colors.white70, fontSize: 14)),
                   ],
                 ),
                 IconButton(onPressed: _loadWeather, icon: const Icon(Icons.refresh, color: Colors.white)),
