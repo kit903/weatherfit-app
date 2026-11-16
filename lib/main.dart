@@ -68,7 +68,15 @@ class ChatMessage {
   });
 }
 
-// ================== 1. AI HELPER (SMART & DYNAMIC LOCAL FALLBACK) ==================
+// Model hasil AI untuk menghindari konflik kurung sudut (< >)
+class AiResult {
+  final String text;
+  final bool fallback;
+
+  AiResult({required this.text, required this.fallback});
+}
+
+// ================== 1. AI HELPER (SMART & GITHUB-SAFE) ==================
 class AiHelper {
   // Dirakit saat runtime agar lolos dari deteksi Secret Scanner GitHub
   static String get _apiKey {
@@ -81,8 +89,7 @@ class AiHelper {
   
   static const String _url = 'https://openrouter.ai/api/v1/chat/completions';
 
-  // Mengembalikan Map berisi teks jawaban dan status fallback (true = Local, false = Live AI)
-  static Future> askAi({
+  static Future<AiResult> askAi({
     required String userQuestion,
     required String weatherContext,
     required String location,
@@ -128,7 +135,7 @@ Kamu adalah asisten cuaca Waterfit. Kamu menerima 3 data prakiraan cuaca (ECMWF,
               final content = message?['content']?.toString().trim();
               
               if (content != null && content.isNotEmpty) {
-                return {'text': content, 'fallback': false}; // Berhasil pakai Live AI
+                return AiResult(text: content, fallback: false); // Berhasil pakai Live AI
               }
             }
           }
@@ -142,7 +149,10 @@ Kamu adalah asisten cuaca Waterfit. Kamu menerima 3 data prakiraan cuaca (ECMWF,
     await Future.delayed(const Duration(milliseconds: 400));
 
     // 🛡️ DYNAMIC SMART FALLBACK
-    return {'text': _generateDynamicFallbackAnswer(userQuestion, weatherContext, location), 'fallback': true};
+    return AiResult(
+      text: _generateDynamicFallbackAnswer(userQuestion, weatherContext, location), 
+      fallback: true,
+    );
   }
 
   static String _generateDynamicFallbackAnswer(String question, String context, String location) {
@@ -815,16 +825,13 @@ class _ChatScreenState extends State<ChatScreen> {
       location: widget.location,
     );
 
-    final aiResponseText = result['text'] as String;
-    final isFallbackActive = result['fallback'] as bool;
-
     setState(() {
       _messages.add(ChatMessage(
-        text: aiResponseText, 
+        text: result.text, 
         isUser: false,
-        isUsingFallback: isFallbackActive,
+        isUsingFallback: result.fallback,
       ));
-      _isLastUsingFallback = isFallbackActive; 
+      _isLastUsingFallback = result.fallback; 
       _isLoading = false;
     });
     _scrollToBottom();
