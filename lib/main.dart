@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'dart:math';
+import 'dart:async';
 
 void main() {
   runApp(const WeatherFitApp());
@@ -444,6 +445,94 @@ class WeatherUtils {
   }
 }
 
+// ================== ANIMATED LOADING SPLASH SCREEN ==================
+class WeatherLoadingWidget extends StatefulWidget {
+  const WeatherLoadingWidget({super.key});
+
+  @override
+  State<WeatherLoadingWidget> createState() => _WeatherLoadingWidgetState();
+}
+
+class _WeatherLoadingWidgetState extends State<WeatherLoadingWidget> {
+  int _iconIndex = 0;
+  final List<IconData> _icons = [
+    Icons.wb_sunny,         // Cerah
+    Icons.cloud,            // Berawan
+    Icons.thunderstorm,     // Badai Petir
+  ];
+  final List<String> _labels = [
+    'Memindai langit cerah...',
+    'Menghimpun awan...',
+    'Menganalisis badai petir...',
+  ];
+  late Timer _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(const Duration(milliseconds: 1100), (timer) {
+      if (mounted) {
+        setState(() {
+          _iconIndex = (_iconIndex + 1) % _icons.length;
+        });
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Transisi Smooth 3 Ikon Awan di tempat yang sama
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 600),
+            transitionBuilder: (Widget child, Animation<double> animation) {
+              return FadeTransition(
+                opacity: animation,
+                child: ScaleTransition(scale: animation, child: child),
+              );
+            },
+            child: Icon(
+              _icons[_iconIndex],
+              key: ValueKey<int>(_iconIndex),
+              size: 80,
+              color: Colors.white,
+            ),
+          ),
+          const SizedBox(height: 24),
+          const Text(
+            'WeatherFit',
+            style: TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.bold, letterSpacing: 1.2),
+          ),
+          const SizedBox(height: 10),
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 400),
+            child: Text(
+              _labels[_iconIndex],
+              key: ValueKey<String>(_labels[_iconIndex]),
+              style: const TextStyle(color: Colors.white70, fontSize: 14, fontStyle: FontStyle.italic),
+            ),
+          ),
+          const SizedBox(height: 36),
+          const SizedBox(
+            width: 28,
+            height: 28,
+            child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 // ================== SCREEN ==================
 class WeatherScreen extends StatefulWidget {
   const WeatherScreen({super.key});
@@ -559,88 +648,92 @@ class _WeatherScreenState extends State<WeatherScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final today = (_weather != null && _weather!.isNotEmpty) ? _weather!.first : null;
-    final bgColor = today != null ? WeatherUtils.getWeatherColor(today.weatherCode) : const Color(0xFF4A90E2);
-
-    // Ambil probabilitas hujan yang selaras dengan jam terdekat saat ini agar tidak bentrok dengan list 24 jam
-    int activeRainProbability = today?.precipitationProbability ?? 0;
+    // Ambil data jam saat ini (real-time hourly) agar kartu utama & rekomendasi sinkron 100%
+    HourlyForecast? currentHourData;
     if (_hourlyWeather != null && _hourlyWeather!.isNotEmpty) {
       final now = DateTime.now();
-      final currentHourData = _hourlyWeather!.firstWhere(
+      currentHourData = _hourlyWeather!.firstWhere(
         (h) => h.time.hour == now.hour && h.time.day == now.day,
         orElse: () => _hourlyWeather!.first,
       );
-      activeRainProbability = currentHourData.precipitationProbability;
     }
+
+    final today = (_weather != null && _weather!.isNotEmpty) ? _weather!.first : null;
+    
+    // Warna background disesuaikan dengan kondisi jam saat ini
+    final activeCode = currentHourData?.weatherCode ?? today?.weatherCode ?? 0;
+    final bgColor = WeatherUtils.getWeatherColor(activeCode);
+
+    int activeRainProbability = currentHourData?.precipitationProbability ?? today?.precipitationProbability ?? 0;
 
     return Scaffold(
       backgroundColor: bgColor,
       body: SafeArea(
-        child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
+        child: _loading
+            ? const WeatherLoadingWidget() // SplashScreen animasi 3 ikon awan berganti smooth
+            : Column(
                 children: [
-                  Container(
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.2),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: TextField(
-                      controller: _searchController,
-                      onChanged: _onSearchChanged,
-                      style: const TextStyle(color: Colors.white),
-                      decoration: InputDecoration(
-                        hintText: 'Cari kota di seluruh dunia...',
-                        hintStyle: const TextStyle(color: Colors.white70),
-                        border: InputBorder.none,
-                        prefixIcon: const Icon(Icons.search, color: Colors.white),
-                        suffixIcon: _isSearching 
-                            ? const Padding(
-                                padding: EdgeInsets.all(12.0),
-                                child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)),
-                              )
-                            : null,
-                      ),
+                  Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Column(
+                      children: [
+                        Container(
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: TextField(
+                            controller: _searchController,
+                            onChanged: _onSearchChanged,
+                            style: const TextStyle(color: Colors.white),
+                            decoration: InputDecoration(
+                              hintText: 'Cari kota di seluruh dunia...',
+                              hintStyle: const TextStyle(color: Colors.white70),
+                              border: InputBorder.none,
+                              prefixIcon: const Icon(Icons.search, color: Colors.white),
+                              suffixIcon: _isSearching 
+                                  ? const Padding(
+                                      padding: EdgeInsets.all(12.0),
+                                      child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)),
+                                    )
+                                  : null,
+                            ),
+                          ),
+                        ),
+                        if (_searchResults.isNotEmpty)
+                          Container(
+                            margin: const EdgeInsets.only(top: 8),
+                            constraints: const BoxConstraints(maxHeight: 250),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(12),
+                              boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 10)],
+                            ),
+                            child: ListView.builder(
+                              shrinkWrap: true,
+                              itemCount: _searchResults.length,
+                              itemBuilder: (context, index) {
+                                final city = _searchResults[index];
+                                final subtitle = [city.admin1, city.country].where((e) => e.isNotEmpty).join(', ');
+                                return ListTile(
+                                  leading: const Icon(Icons.location_on, color: Color(0xFF4A90E2)),
+                                  title: Text(city.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+                                  subtitle: Text(subtitle),
+                                  onTap: () => _selectCity(city),
+                                );
+                              },
+                            ),
+                          ),
+                      ],
                     ),
                   ),
-                  if (_searchResults.isNotEmpty)
-                    Container(
-                      margin: const EdgeInsets.only(top: 8),
-                      constraints: const BoxConstraints(maxHeight: 250),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(12),
-                        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 10)],
-                      ),
-                      child: ListView.builder(
-                        shrinkWrap: true,
-                        itemCount: _searchResults.length,
-                        itemBuilder: (context, index) {
-                          final city = _searchResults[index];
-                          final subtitle = [city.admin1, city.country].where((e) => e.isNotEmpty).join(', ');
-                          return ListTile(
-                            leading: const Icon(Icons.location_on, color: Color(0xFF4A90E2)),
-                            title: Text(city.name, style: const TextStyle(fontWeight: FontWeight.bold)),
-                            subtitle: Text(subtitle),
-                            onTap: () => _selectCity(city),
-                          );
-                        },
-                      ),
-                    ),
+                  Expanded(
+                    child: _error != null
+                        ? _buildError()
+                        : _buildContent(today!, currentHourData, activeRainProbability),
+                  ),
                 ],
               ),
-            ),
-            Expanded(
-              child: _loading
-                  ? const Center(child: CircularProgressIndicator(color: Colors.white))
-                  : _error != null
-                      ? _buildError()
-                      : _buildContent(today!, activeRainProbability),
-            ),
-          ],
-        ),
       ),
     );
   }
@@ -663,7 +756,7 @@ class _WeatherScreenState extends State<WeatherScreen> {
     );
   }
 
-  Widget _buildContent(DailyForecast today, int activeRainProbability) {
+  Widget _buildContent(DailyForecast today, HourlyForecast? currentHour, int activeRainProbability) {
     return RefreshIndicator(
       onRefresh: _loadWeather,
       child: SingleChildScrollView(
@@ -720,9 +813,10 @@ class _WeatherScreenState extends State<WeatherScreen> {
             const SizedBox(height: 24),
             _buildModelSelector(),
             const SizedBox(height: 24),
-            _buildCurrentWeather(today),
+            // Kartu utama disinkronkan dengan jam saat ini
+            _buildCurrentWeather(today, currentHour),
             const SizedBox(height: 24),
-            // Menggunakan probabilitas jam aktif agar selaras dengan list 24 jam
+            // Rekomendasi payung disinkronkan dengan probabilitas jam saat ini
             _buildUmbrellaRecommendation(activeRainProbability),
             
             const SizedBox(height: 24),
@@ -882,25 +976,30 @@ class _WeatherScreenState extends State<WeatherScreen> {
           const Spacer(),
           Text('${forecast.tempMin.round()}°', style: const TextStyle(fontSize: 14, color: Color(0xFF95A5A6))),
           const SizedBox(width: 8),
-          Text('${forecast.tempMax.round()}°', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF2C3E50))),
+          Text('${forecast.tempMax.round()}°', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF2C3E50)))),
         ],
       ),
     );
   }
 
-  Widget _buildCurrentWeather(DailyForecast today) {
+  Widget _buildCurrentWeather(DailyForecast today, HourlyForecast? currentHour) {
+    final temp = currentHour?.temp.round() ?? today.tempMax.round();
+    final code = currentHour?.weatherCode ?? today.weatherCode;
+    final rainProb = currentHour?.precipitationProbability ?? today.precipitationProbability;
+    final description = WeatherUtils.getWeatherDescription(code);
+
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(WeatherUtils.getWeatherIcon(today.weatherCode), color: Colors.white, size: 80),
+        Icon(WeatherUtils.getWeatherIcon(code), color: Colors.white, size: 80),
         const SizedBox(width: 20),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('${today.tempMax.round()}°', style: const TextStyle(color: Colors.white, fontSize: 64, fontWeight: FontWeight.w200, height: 1)),
-              Text(WeatherUtils.getWeatherDescription(today.weatherCode), style: const TextStyle(color: Colors.white70, fontSize: 16)),
-              Text('Min ${today.tempMin.round()}° • Hujan ${today.precipitationProbability}%', style: const TextStyle(color: Colors.white60, fontSize: 13)),
+              Text('$temp°', style: const TextStyle(color: Colors.white, fontSize: 64, fontWeight: FontWeight.w200, height: 1)),
+              Text(description, style: const TextStyle(color: Colors.white70, fontSize: 16)),
+              Text('Min ${today.tempMin.round()}° • Hujan $rainProb%', style: const TextStyle(color: Colors.white60, fontSize: 13)),
             ],
           ),
         ),
