@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'dart:math';
 
 void main() {
   runApp(const WeatherFitApp());
@@ -58,10 +59,16 @@ class CityLocation {
 class ChatMessage {
   final String text;
   final bool isUser;
-  ChatMessage({required this.text, required this.isUser});
+  final bool isUsingFallback; // Status apakah pesan ini dihasilkan dari local fallback
+
+  ChatMessage({
+    required this.text, 
+    required this.isUser, 
+    this.isUsingFallback = false,
+  });
 }
 
-// ================== 1. AI HELPER (SMART FALLBACK & MULTI-MODEL) ==================
+// ================== 1. AI HELPER (SMART & DYNAMIC LOCAL FALLBACK) ==================
 class AiHelper {
   // API Key OpenRouter (Dipecah anti-warning GitHub)
   static const String _p1 = 'sk-or-v1-aa4ba0eb5cb405afc';
@@ -71,7 +78,8 @@ class AiHelper {
   
   static const String _url = 'https://openrouter.ai/api/v1/chat/completions';
 
-  static Future<String> askAi({
+  // Return Map berisi text jawaban dan status apakah menggunakan fallback
+  static Future> askAi({
     required String userQuestion,
     required String weatherContext,
     required String location,
@@ -116,34 +124,51 @@ Kamu adalah asisten cuaca Waterfit. Kamu menerima 3 data prakiraan cuaca (ECMWF,
               final content = message?['content']?.toString().trim();
               
               if (content != null && content.isNotEmpty) {
-                return content;
+                return {'text': content, 'fallback': false}; // Berhasil pakai AI Asli
               }
             }
           }
         } catch (e) {
-          continue; // Lanjut ke model berikutnya jika timeout/gagal
+          continue; 
         }
       }
     }
 
-    // 🛡️ SMART LOCAL FALLBACK: Jika semua model online sibuk/gagal, 
-    // sistem merespons secara cerdas berdasarkan data cuaca tanpa memunculkan pesan error server.
-    return _generateLocalWeatherAnswer(userQuestion, weatherContext, location);
+    // 🛡️ DYNAMIC SMART FALLBACK (Variasi teks dinamis agar tidak kaku/membosankan)
+    return {'text': _generateDynamicFallbackAnswer(userQuestion, weatherContext, location), 'fallback': true};
   }
 
-  static String _generateLocalWeatherAnswer(String question, String context, String location) {
+  static String _generateDynamicFallbackAnswer(String question, String context, String location) {
     final qLower = question.toLowerCase();
-    
-    if (qLower.contains('payung') || qLower.contains('hujan') || qLower.contains('bawa')) {
+    final random = Random();
+
+    // Kumpulan variasi kalimat agar tidak monoton
+    final umbrellaYes = [
+      "Waduh, sepertinya langit di $location lagi kurang bersahabat nih. Berdasarkan data cuaca, potensi hujannya cukup tinggi. Saran gua, sedia payung atau jas hujan di tas ya bro! ☂️",
+      "Kalo ngeliat kondisi cuaca terkini di $location, risikonya lumayan gede buat turun hujan. Jangan lupa bawa payung biar aktivitas lu ga berantakan di jalan! 🌧️",
+      "Siapin payung deh buat berjaga-jaga di $location hari ini. Prediksi cuaca nunjukin ada potensi tetesan air dari langit yang lumayan sering. Stay safe ya! 🧥",
+    ];
+
+    final umbrellaNo = [
+      "Aman bro! Pindai cuaca di $location nunjukin kondisi yang relatif cerah dan bersahabat. Lu kayaknya gak butuh payung hari ini, nikmati aja aktivitas lu! ✅",
+      "Santai, cuaca di $location keliatannya adem dan kecil kemungkinan hujan. Gak usah repot bawa payung, nikmatin harinya dengan santai! ☀️",
+      "Kondisi atmosfer di $location terpantau stabil dan minim awan mendung. Lu bebas beraktivitas tanpa perlu takut basah kuyup hari ini. 👍",
+    ];
+
+    final timeOrGeneral = [
+      "Melihat pergerakan data cuaca di $location, transisi dari pagi ke sore hari bakal cukup dinamis. Pastikan lu cek grafik jam di halaman utama aplikasi buat tau detail pastinya ya!",
+      "Kondisi udara dan suhu di $location terpantau fluktuatif. Buat waktu terbaik beraktivitas, lu bisa manfaatkan rentang jam pagi sebelum potensi cuaca berubah di siang hari.",
+      "Prakiraan multi-model untuk $location merangkum cuaca yang cukup bervariasi hari ini. Tetap pantau indikator persentase hujan di aplikasi biar lu bisa ambil keputusan pas!",
+    ];
+
+    if (qLower.contains('payung') || qLower.contains('hujan') || qLower.contains('bawa') || qLower.contains('keluar')) {
       if (context.contains('Hujan') || context.contains('Gerimis') || context.contains('Lebat')) {
-        return "Berdasarkan data prakiraan cuaca di $location, ada potensi hujan hari ini. Sebaiknya kamu sedia payung atau jaket ya, terutama untuk antisipasi saat hujan turun di siang atau sore hari! ☂️";
+        return umbrellaYes[random.nextInt(umbrellaYes.length)];
       } else {
-        return "Kondisi cuaca di $location terpantau relatif aman dan minim potensi hujan. Sepertinya kamu belum begitu butuh payung hari ini, tapi tetap jaga kondisi ya! 👍";
+        return umbrellaNo[random.nextInt(umbrellaNo.length)];
       }
-    } else if (qLower.contains('jam') || qLower.contains('kapan') || qLower.contains('pukul') || qLower.contains('cerah')) {
-      return "Untuk wilayah $location, perubahan cuaca terpantau dinamis dari pagi hingga malam. Cek rincian jam pada ringkasan utama aplikasi untuk melihat estimasi waktu terbaiknya ya, bro!";
     } else {
-      return "Halo! Berdasarkan data cuaca terkini untuk $location, kondisinya bervariasi. Tetap pantau persentase peluang hujan di aplikasi agar aktivitas harianmu tetap lancar! 🌤️";
+      return timeOrGeneral[random.nextInt(timeOrGeneral.length)];
     }
   }
 }
@@ -707,7 +732,7 @@ class _WeatherScreenState extends State<WeatherScreen> {
           const Spacer(),
           Text('${forecast.tempMin.round()}°', style: const TextStyle(fontSize: 14, color: Color(0xFF95A5A6))),
           const SizedBox(width: 8),
-          Text('${forecast.tempMax.round()}°', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF2C3E50))),
+          Text('${forecast.tempMax.round()}°', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF2C3E50)))),
         ],
       ),
     );
@@ -754,6 +779,9 @@ class _ChatScreenState extends State<ChatScreen> {
   final TextEditingController _controller = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   bool _isLoading = false;
+  
+  // Status titik indikator AI di bagian atas (Default merah bintik sebelum chat aktif)
+  bool _isLastUsingFallback = true; 
 
   @override
   void initState() {
@@ -761,6 +789,7 @@ class _ChatScreenState extends State<ChatScreen> {
     _messages.add(ChatMessage(
       text: "Halo! Aku Help from the Clouds. Mau tanya apa hari ini?",
       isUser: false,
+      isUsingFallback: true,
     ));
   }
 
@@ -775,14 +804,24 @@ class _ChatScreenState extends State<ChatScreen> {
     });
     _scrollToBottom();
 
-    final aiResponse = await AiHelper.askAi(
+    // Panggil AI Helper yang sudah mendukung smart dynamic fallback
+    final result = await AiHelper.askAi(
       userQuestion: text,
       weatherContext: widget.weatherContext,
       location: widget.location,
     );
 
+    final aiResponseText = result['text'] as String;
+    final isFallbackActive = result['fallback'] as bool;
+
     setState(() {
-      _messages.add(ChatMessage(text: aiResponse, isUser: false));
+      _messages.add(ChatMessage(
+        text: aiResponseText, 
+        isUser: false,
+        isUsingFallback: isFallbackActive,
+      ));
+      // Update status titik indikator atas berdasarkan respons terakhir
+      _isLastUsingFallback = isFallbackActive; 
       _isLoading = false;
     });
     _scrollToBottom();
@@ -807,7 +846,50 @@ class _ChatScreenState extends State<ChatScreen> {
     return Scaffold(
       resizeToAvoidBottomInset: true,
       appBar: AppBar(
-        title: const Text('Help from the Clouds', style: TextStyle(color: Colors.white, fontSize: 18)),
+        title: Row(
+          children: [
+            const Expanded(
+              child: Text(
+                'Help from the Clouds', 
+                style: TextStyle(color: Colors.white, fontSize: 18),
+              ),
+            ),
+            // Indikator Titik Status AI (Merah bintik jika Fallback, Hijau jika AI Asli Aktif)
+            Container(
+              margin: const EdgeInsets.only(right: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.black.withValues(alpha: 0.2),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 10,
+                    height: 10,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: _isLastUsingFallback ? Colors.redAccent : Colors.greenAccent,
+                      boxShadow: [
+                        BoxShadow(
+                          color: (_isLastUsingFallback ? Colors.redAccent : Colors.greenAccent).withValues(alpha: 0.6),
+                          blurRadius: 6,
+                          spreadRadius: 2,
+                        )
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 6],
+                  Text(
+                    _isLastUsingFallback ? 'Local' : 'Live AI',
+                    style: const TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w500),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
         backgroundColor: const Color(0xFF4A90E2),
         iconTheme: const IconThemeData(color: Colors.white),
       ),
@@ -827,8 +909,13 @@ class _ChatScreenState extends State<ChatScreen> {
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                     constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75),
                     decoration: BoxDecoration(
-                      color: msg.isUser ? const Color(0xFF4A90E2) : const Color(0xFFF1F5F9),
+                      color: msg.isUser 
+                          ? const Color(0xFF4A90E2) 
+                          : const Color(0xFFF1F5F9),
                       borderRadius: BorderRadius.circular(16),
+                      border: (!msg.isUser && msg.isUsingFallback)
+                          ? Border.all(color: Colors.redAccent.withValues(alpha: 0.4), width: 1.5) // Border halus merah bintik untuk fallback
+                          : null,
                     ),
                     child: Text(
                       msg.text,
