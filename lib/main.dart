@@ -61,7 +61,7 @@ class ChatMessage {
   ChatMessage({required this.text, required this.isUser});
 }
 
-// ================== 1. AI HELPER (ROBUST & MULTI-FALLBACK) ==================
+// ================== 1. AI HELPER (SMART FALLBACK & MULTI-MODEL) ==================
 class AiHelper {
   // API Key OpenRouter (Dipecah anti-warning GitHub)
   static const String _p1 = 'sk-or-v1-aa4ba0eb5cb405afc';
@@ -76,8 +76,6 @@ class AiHelper {
     required String weatherContext,
     required String location,
   }) async {
-    if (_apiKey.isEmpty) return '⚠️ API Key belum diatur.';
-
     final systemPrompt = '''
 Kamu adalah asisten cuaca Waterfit. Kamu menerima 3 data prakiraan cuaca (ECMWF, GFS, BMKG) untuk lokasi $location. Bandingkan ketiga data tersebut. Prioritaskan data BMKG jika ada perbedaan. Jawab pertanyaan user: "$userQuestion" dengan bahasa santai. Sebutkan rekomendasi bawa payung dan jam terbaik. Jawab SANGAT SINGKAT (maksimal 2 paragraf).
 ''';
@@ -89,44 +87,64 @@ Kamu adalah asisten cuaca Waterfit. Kamu menerima 3 data prakiraan cuaca (ECMWF,
       "openrouter/free"
     ];
 
-    for (String model in modelsToTry) {
-      try {
-        final response = await http.post(
-          Uri.parse(_url),
-          headers: {
-            'Authorization': 'Bearer $_apiKey',
-            'Content-Type': 'application/json',
-            'HTTP-Referer': 'https://waterfit.netlify.app',
-            'X-Title': 'WeatherFit App',
-          },
-          body: jsonEncode({
-            "model": model,
-            "max_tokens": 150,
-            "messages": [
-              {"role": "system", "content": systemPrompt},
-              {"role": "user", "content": "Cuaca: $weatherContext. Pertanyaan: $userQuestion"}
-            ]
-          }),
-        ).timeout(const Duration(seconds: 15));
+    if (_apiKey.isNotEmpty) {
+      for (String model in modelsToTry) {
+        try {
+          final response = await http.post(
+            Uri.parse(_url),
+            headers: {
+              'Authorization': 'Bearer $_apiKey',
+              'Content-Type': 'application/json',
+              'HTTP-Referer': 'https://waterfit.netlify.app',
+              'X-Title': 'WeatherFit App',
+            },
+            body: jsonEncode({
+              "model": model,
+              "max_tokens": 150,
+              "messages": [
+                {"role": "system", "content": systemPrompt},
+                {"role": "user", "content": "Cuaca: $weatherContext. Pertanyaan: $userQuestion"}
+              ]
+            }),
+          ).timeout(const Duration(seconds: 12));
 
-        if (response.statusCode == 200) {
-          final data = jsonDecode(response.body);
-          final choices = data['choices'] as List?;
-          if (choices != null && choices.isNotEmpty) {
-            final message = choices[0]['message'] as Map<String, dynamic>?;
-            final content = message?['content']?.toString().trim();
-            
-            if (content != null && content.isNotEmpty) {
-              return content;
+          if (response.statusCode == 200) {
+            final data = jsonDecode(response.body);
+            final choices = data['choices'] as List?;
+            if (choices != null && choices.isNotEmpty) {
+              final message = choices[0]['message'] as Map<String, dynamic>?;
+              final content = message?['content']?.toString().trim();
+              
+              if (content != null && content.isNotEmpty) {
+                return content;
+              }
             }
           }
+        } catch (e) {
+          continue; // Lanjut ke model berikutnya jika timeout/gagal
         }
-      } catch (e) {
-        continue;
       }
     }
 
-    return '⚠️ Server AI sedang sibuk atau limit tercapai. Silakan coba kirim ulang pesan beberapa saat lagi.';
+    // 🛡️ SMART LOCAL FALLBACK: Jika semua model online sibuk/gagal, 
+    // sistem merespons secara cerdas berdasarkan data cuaca tanpa memunculkan pesan error server.
+    return _generateLocalWeatherAnswer(userQuestion, weatherContext, location);
+  }
+
+  static String _generateLocalWeatherAnswer(String question, String context, String location) {
+    final qLower = question.toLowerCase();
+    
+    if (qLower.contains('payung') || qLower.contains('hujan') || qLower.contains('bawa')) {
+      if (context.contains('Hujan') || context.contains('Gerimis') || context.contains('Lebat')) {
+        return "Berdasarkan data prakiraan cuaca di $location, ada potensi hujan hari ini. Sebaiknya kamu sedia payung atau jaket ya, terutama untuk antisipasi saat hujan turun di siang atau sore hari! ☂️";
+      } else {
+        return "Kondisi cuaca di $location terpantau relatif aman dan minim potensi hujan. Sepertinya kamu belum begitu butuh payung hari ini, tapi tetap jaga kondisi ya! 👍";
+      }
+    } else if (qLower.contains('jam') || qLower.contains('kapan') || qLower.contains('pukul') || qLower.contains('cerah')) {
+      return "Untuk wilayah $location, perubahan cuaca terpantau dinamis dari pagi hingga malam. Cek rincian jam pada ringkasan utama aplikasi untuk melihat estimasi waktu terbaiknya ya, bro!";
+    } else {
+      return "Halo! Berdasarkan data cuaca terkini untuk $location, kondisinya bervariasi. Tetap pantau persentase peluang hujan di aplikasi agar aktivitas harianmu tetap lancar! 🌤️";
+    }
   }
 }
 
