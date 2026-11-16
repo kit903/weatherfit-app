@@ -82,7 +82,6 @@ class AiHelper {
 Kamu adalah asisten cuaca Waterfit. Kamu menerima 3 data prakiraan cuaca (ECMWF, GFS, BMKG) untuk lokasi $location. Bandingkan ketiga data tersebut. Prioritaskan data BMKG jika ada perbedaan. Jawab pertanyaan user: "$userQuestion" dengan bahasa santai. Sebutkan rekomendasi bawa payung dan jam terbaik. Jawab SANGAT SINGKAT (maksimal 2 paragraf).
 ''';
 
-    // Daftar model cadangan (jika model utama sibuk/error, otomatis beralih ke model berikutnya secara instan)
     final modelsToTry = [
       "nvidia/nemotron-3.5-30b-a3b:free",
       "deepseek/deepseek-r1:free",
@@ -97,7 +96,7 @@ Kamu adalah asisten cuaca Waterfit. Kamu menerima 3 data prakiraan cuaca (ECMWF,
           headers: {
             'Authorization': 'Bearer $_apiKey',
             'Content-Type': 'application/json',
-            'HTTP-Referer': 'https://waterfit.netlify.app', // Opsional untuk OpenRouter
+            'HTTP-Referer': 'https://waterfit.netlify.app',
             'X-Title': 'WeatherFit App',
           },
           body: jsonEncode({
@@ -117,14 +116,12 @@ Kamu adalah asisten cuaca Waterfit. Kamu menerima 3 data prakiraan cuaca (ECMWF,
             final message = choices[0]['message'] as Map<String, dynamic>?;
             final content = message?['content']?.toString().trim();
             
-            // Validasi ketat: Pastikan teks benar-benar ada dan tidak kosong (mencegah bug "Tidak ada respons")
             if (content != null && content.isNotEmpty) {
               return content;
             }
           }
         }
       } catch (e) {
-        // Jika model ini timeout atau gagal, lanjutkan ke model berikutnya dalam perulangan
         continue;
       }
     }
@@ -221,7 +218,7 @@ class WeatherService {
           final desc = WeatherUtils.getWeatherDescription((codes[i] as num).toInt());
           final temp = (temps[i] as num).round();
           final prob = (probs[i] as num?)?.toInt() ?? 0;
-          buffer.writeln('Jam $hourStr:$desc, Suhu $temp°C, Hujan$prob%');
+          buffer.writeln('Jam $hourStr: $desc, Suhu $temp°C, Hujan $prob%');
         }
       }
       return buffer.toString();
@@ -237,7 +234,9 @@ class WeatherService {
 [1. Data ECMWF]
 ${results[0]}
 [2. Data GFS]
-${results[1]} [3. Data BMKG]${results[2]}
+${results[1]}
+[3. Data BMKG]
+${results[2]}
 ''';
   }
 
@@ -393,7 +392,7 @@ class _WeatherScreenState extends State<WeatherScreen> {
     setState(() {
       _latitude = city.lat;
       _longitude = city.lon;
-      _displayCityName = '${city.name},${city.country}';
+      _displayCityName = '${city.name}, ${city.country}';
       _searchResults = [];
       _searchController.clear();
     });
@@ -674,4 +673,193 @@ class _WeatherScreenState extends State<WeatherScreen> {
       child: Row(
         children: [
           SizedBox(width: 60, child: Text(label, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Color(0xFF2C3E50)))),
-          Icon
+          Icon(WeatherUtils.getWeatherIcon(forecast.weatherCode), color: const Color(0xFF4A90E2), size: 26),
+          const SizedBox(width: 12),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(color: rainColor.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(8)),
+            child: Row(
+              children: [
+                Icon(Icons.water_drop, size: 12, color: rainColor),
+                const SizedBox(width: 3),
+                Text('${forecast.precipitationProbability}%', style: TextStyle(fontSize: 12, color: rainColor, fontWeight: FontWeight.bold)),
+              ],
+            ),
+          ),
+          const Spacer(),
+          Text('${forecast.tempMin.round()}°', style: const TextStyle(fontSize: 14, color: Color(0xFF95A5A6))),
+          const SizedBox(width: 8),
+          Text('${forecast.tempMax.round()}°', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF2C3E50))),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCurrentWeather(DailyForecast today) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(WeatherUtils.getWeatherIcon(today.weatherCode), color: Colors.white, size: 80),
+        const SizedBox(width: 20),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('${today.tempMax.round()}°', style: const TextStyle(color: Colors.white, fontSize: 64, fontWeight: FontWeight.w200, height: 1)),
+              Text(WeatherUtils.getWeatherDescription(today.weatherCode), style: const TextStyle(color: Colors.white70, fontSize: 16)),
+              Text('Min ${today.tempMin.round()}° • Hujan ${today.precipitationProbability}%', style: const TextStyle(color: Colors.white60, fontSize: 13)),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ================== 3. UI LAYAR CHAT ==================
+class ChatScreen extends StatefulWidget {
+  final String location;
+  final String weatherContext;
+
+  const ChatScreen({
+    super.key,
+    required this.location,
+    required this.weatherContext,
+  });
+
+  @override
+  State<ChatScreen> createState() => _ChatScreenState();
+}
+
+class _ChatScreenState extends State<ChatScreen> {
+  final List<ChatMessage> _messages = [];
+  final TextEditingController _controller = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
+  bool _isLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _messages.add(ChatMessage(
+      text: "Halo! Aku Help from the Clouds. Mau tanya apa hari ini?",
+      isUser: false,
+    ));
+  }
+
+  void _sendMessage() async {
+    final text = _controller.text.trim();
+    if (text.isEmpty || _isLoading) return;
+
+    _controller.clear();
+    setState(() {
+      _messages.add(ChatMessage(text: text, isUser: true));
+      _isLoading = true;
+    });
+    _scrollToBottom();
+
+    final aiResponse = await AiHelper.askAi(
+      userQuestion: text,
+      weatherContext: widget.weatherContext,
+      location: widget.location,
+    );
+
+    setState(() {
+      _messages.add(ChatMessage(text: aiResponse, isUser: false));
+      _isLoading = false;
+    });
+    _scrollToBottom();
+  }
+
+  void _scrollToBottom() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_scrollController.hasClients) {
+        _scrollController.animateTo(
+          _scrollController.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOut,
+        );
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+
+    return Scaffold(
+      resizeToAvoidBottomInset: true,
+      appBar: AppBar(
+        title: const Text('Help from the Clouds', style: TextStyle(color: Colors.white, fontSize: 18)),
+        backgroundColor: const Color(0xFF4A90E2),
+        iconTheme: const IconThemeData(color: Colors.white),
+      ),
+      body: Column(
+        children: [
+          Expanded(
+            child: ListView.builder(
+              controller: _scrollController,
+              padding: const EdgeInsets.all(16),
+              itemCount: _messages.length,
+              itemBuilder: (context, index) {
+                final msg = _messages[index];
+                return Align(
+                  alignment: msg.isUser ? Alignment.centerRight : Alignment.centerLeft,
+                  child: Container(
+                    margin: const EdgeInsets.only(bottom: 12),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75),
+                    decoration: BoxDecoration(
+                      color: msg.isUser ? const Color(0xFF4A90E2) : const Color(0xFFF1F5F9),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Text(
+                      msg.text,
+                      style: TextStyle(
+                        color: msg.isUser ? Colors.white : const Color(0xFF2C3E50),
+                        fontSize: 14,
+                        height: 1.4,
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+          if (_isLoading)
+            const Padding(
+              padding: EdgeInsets.all(8.0),
+              child: LinearProgressIndicator(color: Color(0xFF4A90E2)),
+            ),
+          Padding(
+            padding: EdgeInsets.only(bottom: bottomInset),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                border: Border(top: BorderSide(color: Color(0xFFE2E8F0))),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _controller,
+                      onSubmitted: (_) => _sendMessage(),
+                      decoration: const InputDecoration(
+                        hintText: 'Ketik pesan...',
+                        border: InputBorder.none,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: _sendMessage,
+                    icon: const Icon(Icons.send, color: Color(0xFF4A90E2)),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
