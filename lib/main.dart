@@ -527,3 +527,267 @@ class _WeatherScreenState extends State<WeatherScreen> {
     );
   }
 }
+
+import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+
+// ================== 1. AI HELPER (REST API) ==================
+class AiHelper {
+  // GANTI DENGAN API KEY GEMINI KAMU DI SINI
+  static const String _apiKey = 'YOUR_GEMINI_API_KEY';
+
+  static Future<String> askAi({
+    required String userQuestion,
+    required String weatherContext,
+    required String location,
+  }) async {
+    if (_apiKey == 'YOUR_GEMINI_API_KEY' || _apiKey.isEmpty) {
+      return '⚠️ API Key Gemini belum diatur di AiHelper.';
+    }
+
+    final url = Uri.parse(
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=$_apiKey',
+    );
+
+    final systemPrompt = '''
+Kamu adalah asisten cuaca Waterfit. Kamu menerima 3 data prakiraan cuaca (ECMWF, GFS, BMKG) untuk lokasi $location. Bandingkan ketiga data tersebut. Prioritaskan data BMKG jika ada perbedaan karena itu data lokal Indonesia. Jawab pertanyaan user: "$userQuestion" dengan bahasa santai. Sebutkan rekomendasi bawa payung dan jam terbaik untuk beraktivitas.
+''';
+
+    try {
+      final response = await http.post(
+        url,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          "system_instruction": {
+            "parts": [{"text": systemPrompt}]
+          },
+          "contents": [
+            {
+              "role": "user",
+              "parts": [{"text": "Data cuaca terkini: $weatherContext. Pertanyaan: $userQuestion"}]
+            }
+          ]
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final candidates = data['candidates'] as List?;
+        if (candidates != null && candidates.isNotEmpty) {
+          final content = candidates[0]['content'];
+          final parts = content['parts'] as List?;
+          if (parts != null && parts.isNotEmpty) {
+            return parts[0]['text'] ?? 'Tidak ada respons.';
+          }
+        }
+        return 'Gagal membaca respons dari AI.';
+      } else {
+        return 'Gagal terhubung ke server AI (${response.statusCode})';
+      }
+    } catch (e) {
+      return 'Terjadi kesalahan koneksi: $e';
+    }
+  }
+}
+
+class ChatMessage {
+  final String text;
+  final bool isUser;
+  ChatMessage({required this.text, required this.isUser});
+}
+
+// ================== 2. WIDGET MENU TITIK TIGA (POPUP MENU) ==================
+class CloudMenuButton extends StatelessWidget {
+  final String location;
+  final String weatherContext;
+
+  const CloudMenuButton({
+    super.key,
+    required this.location,
+    required this.weatherContext,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return PopupMenuButton<String>(
+      icon: const Icon(Icons.more_vert, color: Colors.white),
+      color: Colors.white,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      onSelected: (value) {
+        if (value == 'open_ai_chat') {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => ChatScreen(
+                location: location,
+                weatherContext: weatherContext,
+              ),
+            ),
+          );
+        }
+      },
+      itemBuilder: (context) => [
+        const PopupMenuItem(
+          value: 'open_ai_chat',
+          child: Row(
+            children: [
+              Icon(Icons.cloud_done, color: Color(0xFF4A90E2), size: 20),
+              SizedBox(width: 10),
+              Text(
+                'Help from the Clouds',
+                style: TextStyle(fontWeight: FontWeight.w600, color: Color(0xFF2C3E50)),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ================== 3. UI LAYAR CHAT MODEREN (CHAT SCREEN) ==================
+class ChatScreen extends StatefulWidget {
+  final String location;
+  final String weatherContext;
+
+  const ChatScreen({
+    super.key,
+    required this.location,
+    required this.weatherContext,
+  });
+
+  @override
+  State<ChatScreen> createState() => _ChatScreenState();
+}
+
+class _ChatScreenState extends State<ChatScreen> {
+  final List<ChatMessage> _messages = [];
+  final TextEditingController _controller = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
+  bool _isLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Sapaan awal wajib
+    _messages.add(ChatMessage(
+      text: "Halo! Aku Help from the Clouds. Mau tanya apa hari ini?",
+      isUser: false,
+    ));
+  }
+
+  void _sendMessage() async {
+    final text = _controller.text.trim();
+    if (text.isEmpty || _isLoading) return;
+
+    _controller.clear();
+    setState(() {
+      _messages.add(ChatMessage(text: text, isUser: true));
+      _isLoading = true;
+    });
+    _scrollToBottom();
+
+    // Panggil AiHelper
+    final aiResponse = await AiHelper.askAi(
+      userQuestion: text,
+      weatherContext: widget.weatherContext,
+      location: widget.location,
+    );
+
+    setState(() {
+      _messages.add(ChatMessage(text: aiResponse, isUser: false));
+      _isLoading = false;
+    });
+    _scrollToBottom();
+  }
+
+  void _scrollToBottom() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_scrollController.hasClients) {
+        _scrollController.animateTo(
+          _scrollController.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOut,
+        );
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Help from the Clouds', style: TextStyle(color: Colors.white, fontSize: 18)),
+        backgroundColor: const Color(0xFF4A90E2),
+        iconTheme: const IconThemeData(color: Colors.white),
+      ),
+      body: Column(
+        children: [
+          Expanded(
+            child: ListView.builder(
+              controller: _scrollController,
+              padding: const EdgeInsets.all(16),
+              itemCount: _messages.length,
+              itemBuilder: (context, index) {
+                final msg = _messages[index];
+                return Align(
+                  alignment: msg.isUser ? Alignment.centerRight : Alignment.centerLeft,
+                  child: Container(
+                    margin: const EdgeInsets.only(bottom: 12),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75),
+                    decoration: BoxDecoration(
+                      color: msg.isUser ? const Color(0xFF4A90E2) : const Color(0xFFF1F5F9),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Text(
+                      msg.text,
+                      style: TextStyle(
+                        color: msg.isUser ? Colors.white : const Color(0xFF2C3E50),
+                        fontSize: 14,
+                        height: 1.4,
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+          if (_isLoading)
+            const Padding(
+              padding: EdgeInsets.all(8.0),
+              child: LinearProgressIndicator(color: Color(0xFF4A90E2)),
+            ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            color: Colors.white,
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _controller,
+                    onSubmitted: (_) => _sendMessage(),
+                    decoration: const InputDecoration(
+                      hintText: 'Ketik pesan...',
+                      border: InputBorder.none,
+                    ),
+                  ),
+                ),
+                IconButton(
+                  onPressed: _sendMessage,
+                  icon: const Icon(Icons.send, color: Color(0xFF4A90E2)),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+
+
+
+
