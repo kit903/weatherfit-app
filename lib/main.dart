@@ -491,7 +491,6 @@ class _WeatherLoadingWidgetState extends State<WeatherLoadingWidget> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Transisi Smooth 3 Ikon Awan di tempat yang sama
           AnimatedSwitcher(
             duration: const Duration(milliseconds: 600),
             transitionBuilder: (Widget child, Animation<double> animation) {
@@ -648,7 +647,6 @@ class _WeatherScreenState extends State<WeatherScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Ambil data jam saat ini (real-time hourly) agar kartu utama & rekomendasi sinkron 100%
     HourlyForecast? currentHourData;
     if (_hourlyWeather != null && _hourlyWeather!.isNotEmpty) {
       final now = DateTime.now();
@@ -660,7 +658,6 @@ class _WeatherScreenState extends State<WeatherScreen> {
 
     final today = (_weather != null && _weather!.isNotEmpty) ? _weather!.first : null;
     
-    // Warna background disesuaikan dengan kondisi jam saat ini
     final activeCode = currentHourData?.weatherCode ?? today?.weatherCode ?? 0;
     final bgColor = WeatherUtils.getWeatherColor(activeCode);
 
@@ -670,7 +667,7 @@ class _WeatherScreenState extends State<WeatherScreen> {
       backgroundColor: bgColor,
       body: SafeArea(
         child: _loading
-            ? const WeatherLoadingWidget() // SplashScreen animasi 3 ikon awan berganti smooth
+            ? const WeatherLoadingWidget()
             : Column(
                 children: [
                   Padding(
@@ -813,10 +810,8 @@ class _WeatherScreenState extends State<WeatherScreen> {
             const SizedBox(height: 24),
             _buildModelSelector(),
             const SizedBox(height: 24),
-            // Kartu utama disinkronkan dengan jam saat ini
             _buildCurrentWeather(today, currentHour),
             const SizedBox(height: 24),
-            // Rekomendasi payung disinkronkan dengan probabilitas jam saat ini
             _buildUmbrellaRecommendation(activeRainProbability),
             
             const SizedBox(height: 24),
@@ -976,7 +971,7 @@ class _WeatherScreenState extends State<WeatherScreen> {
           const Spacer(),
           Text('${forecast.tempMin.round()}°', style: const TextStyle(fontSize: 14, color: Color(0xFF95A5A6))),
           const SizedBox(width: 8),
-          Text('${forecast.tempMax.round()}°', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF2C3E50)))),
+          Text('${forecast.tempMax.round()}°', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF2C3E50))),
         ],
       ),
     );
