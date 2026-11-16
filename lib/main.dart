@@ -491,7 +491,7 @@ class _WeatherScreenState extends State<WeatherScreen> {
                 children: [
                   Container(
                     decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.2),
+                      color: Colors.white.withOpacity(0.2),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: TextField(
@@ -519,7 +519,7 @@ class _WeatherScreenState extends State<WeatherScreen> {
                       decoration: BoxDecoration(
                         color: Colors.white,
                         borderRadius: BorderRadius.circular(12),
-                        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 10)],
+                        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 10)],
                       ),
                       child: ListView.builder(
                         shrinkWrap: true,
@@ -654,7 +654,7 @@ class _WeatherScreenState extends State<WeatherScreen> {
     ];
     return Container(
       padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(12)),
+      decoration: BoxDecoration(color: Colors.white.withOpacity(0.15), borderRadius: BorderRadius.circular(12)),
       child: Row(
         children: models.map((m) {
           final isSelected = m['key'] == _selectedModel;
@@ -682,12 +682,12 @@ class _WeatherScreenState extends State<WeatherScreen> {
     final text = WeatherUtils.getUmbrellaRecommendation(probability);
     return Container(
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 12, offset: const Offset(0, 4))]),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 12, offset: const Offset(0, 4))]),
       child: Row(
         children: [
           Container(
             padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(color: color.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(12)),
+            decoration: BoxDecoration(color: color.withOpacity(0.15), borderRadius: BorderRadius.circular(12)),
             child: Icon(icon, color: color, size: 28),
           ),
           const SizedBox(width: 14),
@@ -712,7 +712,7 @@ class _WeatherScreenState extends State<WeatherScreen> {
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14), boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 8, offset: const Offset(0, 2))]),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.08), blurRadius: 8, offset: const Offset(0, 2))]),
       child: Row(
         children: [
           SizedBox(width: 60, child: Text(label, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Color(0xFF2C3E50)))),
@@ -720,7 +720,7 @@ class _WeatherScreenState extends State<WeatherScreen> {
           const SizedBox(width: 12),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(color: rainColor.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(8)),
+            decoration: BoxDecoration(color: rainColor.withOpacity(0.12), borderRadius: BorderRadius.circular(8)),
             child: Row(
               children: [
                 Icon(Icons.water_drop, size: 12, color: rainColor),
@@ -859,7 +859,7 @@ class _ChatScreenState extends State<ChatScreen> {
               margin: const EdgeInsets.only(right: 8),
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
-                color: Colors.black.withValues(alpha: 0.2),
+                color: Colors.black.withOpacity(0.2),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Row(
@@ -873,7 +873,7 @@ class _ChatScreenState extends State<ChatScreen> {
                       color: _isLastUsingFallback ? Colors.redAccent : Colors.greenAccent,
                       boxShadow: [
                         BoxShadow(
-                          color: (_isLastUsingFallback ? Colors.redAccent : Colors.greenAccent).withValues(alpha: 0.6),
+                          color: (_isLastUsingFallback ? Colors.redAccent : Colors.greenAccent).withOpacity(0.6),
                           blurRadius: 6,
                           spreadRadius: 2,
                         )
@@ -914,7 +914,7 @@ class _ChatScreenState extends State<ChatScreen> {
                           : const Color(0xFFF1F5F9),
                       borderRadius: BorderRadius.circular(16),
                       border: (!msg.isUser && msg.isUsingFallback)
-                          ? Border.all(color: Colors.redAccent.withValues(alpha: 0.4), width: 1.5) // Border halus merah bintik untuk fallback
+                          ? Border.all(color: Colors.redAccent.withOpacity(0.4), width: 1.5) // Border halus merah bintik untuk fallback
                           : null,
                     ),
                     child: Text(
