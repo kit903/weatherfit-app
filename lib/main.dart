@@ -61,7 +61,7 @@ class ChatMessage {
   ChatMessage({required this.text, required this.isUser});
 }
 
-// ================== 1. AI HELPER (OPENROUTER) ==================
+// ================== 1. AI HELPER (OPENROUTER AUTO) ==================
 class AiHelper {
   // API Key dipecah (Anti-GitHub Warning)
   static const String _p1 = 'sk-or-v1-aa4ba0eb5cb405afc';
@@ -90,8 +90,8 @@ Kamu adalah asisten cuaca Waterfit. Kamu menerima 3 data prakiraan cuaca (ECMWF,
           'Content-Type': 'application/json',
         },
         body: jsonEncode({
-          // GANTI MODEL: Pakai Phi-3 Mini (Jauh lebih stabil dari Llama/Gemma)
-          "model": "microsoft/phi-3-mini-128k-instruct:free", 
+          // MODEL AUTO-ROUTER: Anti 404 karena OpenRouter pilih model gratis yang aktif
+          "model": "openrouter/free", 
           "messages": [
             {"role": "system", "content": systemPrompt},
             {"role": "user", "content": "Data cuaca terkini: $weatherContext. Pertanyaan: $userQuestion"}
@@ -103,7 +103,8 @@ Kamu adalah asisten cuaca Waterfit. Kamu menerima 3 data prakiraan cuaca (ECMWF,
         final data = jsonDecode(response.body);
         return data['choices'][0]['message']['content'] ?? 'Tidak ada respons.';
       } else {
-        return 'Error API (${response.statusCode}). Coba lagi nanti.';
+        // Tampilkan pesan error yang lebih jelas
+        return 'Error API (${response.statusCode}). Kuota habis atau model sedang sibuk. Coba lagi nanti.';
       }
     } catch (e) {
       return 'Terjadi kesalahan: $e';
@@ -697,7 +698,7 @@ class _WeatherScreenState extends State<WeatherScreen> {
   }
 }
 
-// ================== 3. UI LAYAR CHAT (ANTI-KETUTUP KEYBOARD) ==================
+// ================== 3. UI LAYAR CHAT (FIX MOBILE KEYBOARD) ==================
 class ChatScreen extends StatefulWidget {
   final String location;
   final String weatherContext;
@@ -765,9 +766,11 @@ class _ChatScreenState extends State<ChatScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Ambil tinggi keyboard (viewInsets) biar layout di HP gak ketutup
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+
     return Scaffold(
-      // KUNCI UTAMA: true agar layout terdorong ke atas saat keyboard muncul
-      resizeToAvoidBottomInset: true, 
+      resizeToAvoidBottomInset: true,
       appBar: AppBar(
         title: const Text('Help from the Clouds', style: TextStyle(color: Colors.white, fontSize: 18)),
         backgroundColor: const Color(0xFF4A90E2),
@@ -810,30 +813,33 @@ class _ChatScreenState extends State<ChatScreen> {
               padding: EdgeInsets.all(8.0),
               child: LinearProgressIndicator(color: Color(0xFF4A90E2)),
             ),
-          // KOLOM INPUT DIBUNGKUS CONTAINER BIAR RAPI
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            decoration: const BoxDecoration(
-              color: Colors.white,
-              border: Border(top: BorderSide(color: Color(0xFFE2E8F0))),
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _controller,
-                    onSubmitted: (_) => _sendMessage(),
-                    decoration: const InputDecoration(
-                      hintText: 'Ketik pesan...',
-                      border: InputBorder.none,
+          // Bungkus input pakai Padding viewInsets biar aman di HP & Desktop
+          Padding(
+            padding: EdgeInsets.only(bottom: bottomInset),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                border: Border(top: BorderSide(color: Color(0xFFE2E8F0))),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _controller,
+                      onSubmitted: (_) => _sendMessage(),
+                      decoration: const InputDecoration(
+                        hintText: 'Ketik pesan...',
+                        border: InputBorder.none,
+                      ),
                     ),
                   ),
-                ),
-                IconButton(
-                  onPressed: _sendMessage,
-                  icon: const Icon(Icons.send, color: Color(0xFF4A90E2)),
-                ),
-              ],
+                  IconButton(
+                    onPressed: _sendMessage,
+                    icon: const Icon(Icons.send, color: Color(0xFF4A90E2)),
+                  ),
+                ],
+              ),
             ),
           ),
         ],
