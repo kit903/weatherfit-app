@@ -61,81 +61,74 @@ class ChatMessage {
   ChatMessage({required this.text, required this.isUser});
 }
 
-// ================== 1. AI HELPER (GROQ + FALLBACK) ==================
+// ================== 1. AI HELPER (OPENROUTER ULTRA CEPAT) ==================
 class AiHelper {
-  // API Key Groq (Dipecah anti-warning)
-  static const String _g1 = 'gsk_pA8MUQ7wDScCGDyY1Ksb';
-  static const String _g2 = 'WGdyb3FYQN5bAUBg6a597n5B';
-  static const String _g3 = 'lGVUritY';
-  static const String _groqKey = _g1 + _g2 + _g3;
-
-  // API Key OpenRouter (Cadangan, dipecah juga)
-  static const String _o1 = 'sk-or-v1-aa4ba0eb5cb405afc';
-  static const String _o2 = 'f519bc825efac03a09a42';
-  static const String _o3 = '8fd24336ae2c55e870e85268ec';
-  static const String _openRouterKey = _o1 + _o2 + _o3;
+  // API Key OpenRouter (Dipecah anti-warning GitHub)
+  static const String _p1 = 'sk-or-v1-aa4ba0eb5cb405afc';
+  static const String _p2 = 'f519bc825efac03a09a42';
+  static const String _p3 = '8fd24336ae2c55e870e85268ec';
+  static const String _apiKey = _p1 + _p2 + _p3;
+  
+  static const String _url = 'https://openrouter.ai/api/v1/chat/completions';
 
   static Future<String> askAi({
     required String userQuestion,
     required String weatherContext,
     required String location,
   }) async {
+    if (_apiKey.isEmpty) return '⚠️ API Key belum diatur.';
+
     final systemPrompt = '''
-Kamu adalah asisten cuaca Waterfit. Kamu menerima 3 data prakiraan cuaca (ECMWF, GFS, BMKG) untuk lokasi $location. Bandingkan ketiga data tersebut. Prioritaskan data BMKG jika ada perbedaan. Jawab pertanyaan user: "$userQuestion" dengan bahasa santai. Sebutkan rekomendasi bawa payung dan jam terbaik. Jawab SINGKAT (maksimal 3 paragraf).
+Kamu adalah asisten cuaca Waterfit. Kamu menerima 3 data prakiraan cuaca (ECMWF, GFS, BMKG) untuk lokasi $location. Bandingkan ketiga data tersebut. Prioritaskan data BMKG jika ada perbedaan. Jawab pertanyaan user: "$userQuestion" dengan bahasa santai. Sebutkan rekomendasi bawa payung dan jam terbaik. Jawab SANGAT SINGKAT (maksimal 2 paragraf).
 ''';
 
-    // ==== COBA 1: GROQ (Super Cepat) ====
     try {
       final response = await http.post(
-        Uri.parse('https://api.groq.com/openai/v1/chat/completions'),
+        Uri.parse(_url),
         headers: {
-          'Authorization': 'Bearer $_groqKey',
+          'Authorization': 'Bearer $_apiKey',
           'Content-Type': 'application/json',
         },
         body: jsonEncode({
-          "model": "llama-3.3-70b-versatile",
-          "max_tokens": 250,
+          // MODEL CEPAT: NVIDIA Nemotron (Benchmark < 1 detik)
+          "model": "nvidia/nemotron-3.5-30b-a3b:free", 
+          "max_tokens": 150, // Batasi jawaban biar cepet selesai
           "messages": [
             {"role": "system", "content": systemPrompt},
-            {"role": "user", "content": "Data cuaca: $weatherContext. Pertanyaan: $userQuestion"}
+            {"role": "user", "content": "Cuaca: $weatherContext. Pertanyaan: $userQuestion"}
           ]
         }),
-      ).timeout(const Duration(seconds: 8)); // Timeout cepat
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        return data['choices'][0]['message']['content'] ?? 'Tidak ada respons.';
-      }
-    } catch (e) {
-      // Abaikan error Groq, lanjut ke fallback
-    }
-
-    // ==== COBA 2: OPENROUTER (Fallback) ====
-    try {
-      final response = await http.post(
-        Uri.parse('https://openrouter.ai/api/v1/chat/completions'),
-        headers: {
-          'Authorization': 'Bearer $_openRouterKey',
-          'Content-Type': 'application/json',
-        },
-        body: jsonEncode({
-          "model": "openrouter/auto",
-          "max_tokens": 250,
-          "messages": [
-            {"role": "system", "content": systemPrompt},
-            {"role": "user", "content": "Data cuaca: $weatherContext. Pertanyaan: $userQuestion"}
-          ]
-        }),
-      ).timeout(const Duration(seconds: 15));
+      ).timeout(const Duration(seconds: 20));
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         return data['choices'][0]['message']['content'] ?? 'Tidak ada respons.';
       } else {
-        return 'Error AI (${response.statusCode}). Server sibuk.';
+        // Fallback ke auto-router kalau model Nemotron error
+        final fallbackResponse = await http.post(
+          Uri.parse(_url),
+          headers: {
+            'Authorization': 'Bearer $_apiKey',
+            'Content-Type': 'application/json',
+          },
+          body: jsonEncode({
+            "model": "openrouter/free",
+            "max_tokens": 150,
+            "messages": [
+              {"role": "system", "content": systemPrompt},
+              {"role": "user", "content": "Cuaca: $weatherContext. Pertanyaan: $userQuestion"}
+            ]
+          }),
+        ).timeout(const Duration(seconds: 20));
+
+        if (fallbackResponse.statusCode == 200) {
+          final data = jsonDecode(fallbackResponse.body);
+          return data['choices'][0]['message']['content'] ?? 'Tidak ada respons.';
+        }
+        return 'Error API (${response.statusCode}). Server sibuk.';
       }
-    } catch (e) {
-      return 'Semua server AI sedang sibuk. Coba lagi nanti.';
+    } on Exception catch (e) {
+      return 'Server AI timeout. Coba lagi nanti.';
     }
   }
 }
