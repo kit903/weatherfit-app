@@ -63,7 +63,7 @@ class ChatMessage {
 
 // ================== 1. AI HELPER (OPENROUTER) ==================
 class AiHelper {
-  // TRIK ANTI-WARNING GITHUB: API Key dipecah jadi 3 bagian
+  // API Key dipecah (Anti-GitHub Warning)
   static const String _p1 = 'sk-or-v1-aa4ba0eb5cb405afc';
   static const String _p2 = 'f519bc825efac03a09a42';
   static const String _p3 = '8fd24336ae2c55e870e85268ec';
@@ -76,9 +76,7 @@ class AiHelper {
     required String weatherContext,
     required String location,
   }) async {
-    if (_apiKey.isEmpty) {
-      return '⚠️ API Key OpenRouter belum diatur.';
-    }
+    if (_apiKey.isEmpty) return '⚠️ API Key OpenRouter belum diatur.';
 
     final systemPrompt = '''
 Kamu adalah asisten cuaca Waterfit. Kamu menerima 3 data prakiraan cuaca (ECMWF, GFS, BMKG) untuk lokasi $location. Bandingkan ketiga data tersebut. Prioritaskan data BMKG jika ada perbedaan karena itu data lokal Indonesia. Jawab pertanyaan user: "$userQuestion" dengan bahasa santai. Sebutkan rekomendasi bawa payung dan jam terbaik untuk beraktivitas.
@@ -92,17 +90,11 @@ Kamu adalah asisten cuaca Waterfit. Kamu menerima 3 data prakiraan cuaca (ECMWF,
           'Content-Type': 'application/json',
         },
         body: jsonEncode({
-          // MODEL BARU: Google Gemma (Gratis & Stabil di OpenRouter)
-          "model": "google/gemma-2-9b-it:free", 
+          // GANTI MODEL: Pakai Phi-3 Mini (Jauh lebih stabil dari Llama/Gemma)
+          "model": "microsoft/phi-3-mini-128k-instruct:free", 
           "messages": [
-            {
-              "role": "system",
-              "content": systemPrompt
-            },
-            {
-              "role": "user",
-              "content": "Data cuaca terkini: $weatherContext. Pertanyaan: $userQuestion"
-            }
+            {"role": "system", "content": systemPrompt},
+            {"role": "user", "content": "Data cuaca terkini: $weatherContext. Pertanyaan: $userQuestion"}
           ]
         }),
       );
@@ -111,7 +103,7 @@ Kamu adalah asisten cuaca Waterfit. Kamu menerima 3 data prakiraan cuaca (ECMWF,
         final data = jsonDecode(response.body);
         return data['choices'][0]['message']['content'] ?? 'Tidak ada respons.';
       } else {
-        return 'Gagal terhubung ke AI. Status: ${response.statusCode}';
+        return 'Error API (${response.statusCode}). Coba lagi nanti.';
       }
     } catch (e) {
       return 'Terjadi kesalahan: $e';
@@ -214,9 +206,9 @@ class WeatherService {
     }
 
     final results = await Future.wait([
-      getModelHourly('ecmwf_ifs025'),      // 1. ECMWF
-      getModelHourly('ncep_gfs_seamless'), // 2. GFS
-      getModelHourly(null),                // 3. BMKG / Lokal
+      getModelHourly('ecmwf_ifs025'),
+      getModelHourly('ncep_gfs_seamless'),
+      getModelHourly(null),
     ]);
 
     return '''
@@ -401,7 +393,7 @@ class _WeatherScreenState extends State<WeatherScreen> {
         longitude: _longitude,
       );
       if (!mounted) return;
-      Navigator.pop(context); // Tutup dialog loading
+      Navigator.pop(context);
 
       Navigator.push(
         context,
@@ -705,7 +697,7 @@ class _WeatherScreenState extends State<WeatherScreen> {
   }
 }
 
-// ================== 3. UI LAYAR CHAT MODEREN (CHAT SCREEN) ==================
+// ================== 3. UI LAYAR CHAT (ANTI-KETUTUP KEYBOARD) ==================
 class ChatScreen extends StatefulWidget {
   final String location;
   final String weatherContext;
@@ -774,6 +766,8 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      // KUNCI UTAMA: true agar layout terdorong ke atas saat keyboard muncul
+      resizeToAvoidBottomInset: true, 
       appBar: AppBar(
         title: const Text('Help from the Clouds', style: TextStyle(color: Colors.white, fontSize: 18)),
         backgroundColor: const Color(0xFF4A90E2),
@@ -816,9 +810,13 @@ class _ChatScreenState extends State<ChatScreen> {
               padding: EdgeInsets.all(8.0),
               child: LinearProgressIndicator(color: Color(0xFF4A90E2)),
             ),
+          // KOLOM INPUT DIBUNGKUS CONTAINER BIAR RAPI
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            color: Colors.white,
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              border: Border(top: BorderSide(color: Color(0xFFE2E8F0))),
+            ),
             child: Row(
               children: [
                 Expanded(
