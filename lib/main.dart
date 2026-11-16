@@ -257,7 +257,6 @@ class WeatherService {
     return forecasts;
   }
 
-  // Service untuk mengambil detail akurat 24 jam (per jam)
   Future<List<HourlyForecast>> fetchHourlyForecast({
     required double latitude,
     required double longitude,
@@ -294,7 +293,6 @@ class WeatherService {
     final list = <HourlyForecast>[];
     for (int i = 0; i < times.length; i++) {
       final t = DateTime.parse(times[i] as String);
-      // Ambil mulai dari waktu terdekat sekarang hingga 24 jam ke depan
       if (t.isAfter(now.subtract(const Duration(hours: 1)))) {
         list.add(HourlyForecast(
           time: t,
@@ -564,6 +562,17 @@ class _WeatherScreenState extends State<WeatherScreen> {
     final today = (_weather != null && _weather!.isNotEmpty) ? _weather!.first : null;
     final bgColor = today != null ? WeatherUtils.getWeatherColor(today.weatherCode) : const Color(0xFF4A90E2);
 
+    // Ambil probabilitas hujan yang selaras dengan jam terdekat saat ini agar tidak bentrok dengan list 24 jam
+    int activeRainProbability = today?.precipitationProbability ?? 0;
+    if (_hourlyWeather != null && _hourlyWeather!.isNotEmpty) {
+      final now = DateTime.now();
+      final currentHourData = _hourlyWeather!.firstWhere(
+        (h) => h.time.hour == now.hour && h.time.day == now.day,
+        orElse: () => _hourlyWeather!.first,
+      );
+      activeRainProbability = currentHourData.precipitationProbability;
+    }
+
     return Scaffold(
       backgroundColor: bgColor,
       body: SafeArea(
@@ -628,7 +637,7 @@ class _WeatherScreenState extends State<WeatherScreen> {
                   ? const Center(child: CircularProgressIndicator(color: Colors.white))
                   : _error != null
                       ? _buildError()
-                      : _buildContent(today!),
+                      : _buildContent(today!, activeRainProbability),
             ),
           ],
         ),
@@ -654,7 +663,7 @@ class _WeatherScreenState extends State<WeatherScreen> {
     );
   }
 
-  Widget _buildContent(DailyForecast today) {
+  Widget _buildContent(DailyForecast today, int activeRainProbability) {
     return RefreshIndicator(
       onRefresh: _loadWeather,
       child: SingleChildScrollView(
@@ -713,17 +722,12 @@ class _WeatherScreenState extends State<WeatherScreen> {
             const SizedBox(height: 24),
             _buildCurrentWeather(today),
             const SizedBox(height: 24),
-            _buildUmbrellaRecommendation(today.precipitationProbability),
+            // Menggunakan probabilitas jam aktif agar selaras dengan list 24 jam
+            _buildUmbrellaRecommendation(activeRainProbability),
             
-            // ==========================================
-            // UI TERPISAH: PRAKIRAAN 24 JAM (PER JAM)
-            // ==========================================
             const SizedBox(height: 24),
             _buildHourlySection(),
 
-            // ==========================================
-            // UI TERPISAH: PRAKIRAAN 10 HARI (HARIAN)
-            // ==========================================
             const SizedBox(height: 24),
             const Text('Prakiraan 10 Hari', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600)),
             const SizedBox(height: 12),
@@ -740,10 +744,9 @@ class _WeatherScreenState extends State<WeatherScreen> {
     );
   }
 
-  // Widget Bagian Prakiraan 24 Jam (Horizontal Card Section)
   Widget _buildHourlySection() {
     if (_hourlyWeather == null || _hourlyWeather!.isEmpty) return const SizedBox.shrink();
-    final items = _hourlyWeather!.take(24).toList(); // Tampilkan 24 jam ke depan
+    final items = _hourlyWeather!.take(24).toList();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -842,10 +845,10 @@ class _WeatherScreenState extends State<WeatherScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Rekomendasi Hari Ini', style: TextStyle(fontSize: 12, color: Color(0xFF7B8FA1), fontWeight: FontWeight.w500)),
+                const Text('Rekomendasi Saat Ini', style: TextStyle(fontSize: 12, color: Color(0xFF7B8FA1), fontWeight: FontWeight.w500)),
                 const SizedBox(height: 2),
                 Text(text, style: TextStyle(fontSize: 17, color: color, fontWeight: FontWeight.bold)),
-                Text('Peluang hujan $probability%', style: const TextStyle(fontSize: 12, color: Color(0xFF7B8FA1))),
+                Text('Peluang hujan jam ini $probability%', style: const TextStyle(fontSize: 12, color: Color(0xFF7B8FA1))),
               ],
             ),
           ),
