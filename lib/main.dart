@@ -732,7 +732,7 @@ class _WeatherScreenState extends State<WeatherScreen> {
           const Spacer(),
           Text('${forecast.tempMin.round()}°', style: const TextStyle(fontSize: 14, color: Color(0xFF95A5A6))),
           const SizedBox(width: 8),
-          Text('${forecast.tempMax.round()}°', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF2C3E50)))),
+          Text('${forecast.tempMax.round()}°', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF2C3E50))),
         ],
       ),
     );
@@ -880,7 +880,7 @@ class _ChatScreenState extends State<ChatScreen> {
                       ],
                     ),
                   ),
-                  const SizedBox(width: 6],
+                  const SizedBox(width: 6),
                   Text(
                     _isLastUsingFallback ? 'Local' : 'Live AI',
                     style: const TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w500),
