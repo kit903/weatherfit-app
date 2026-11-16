@@ -13,7 +13,10 @@ class WeatherFitApp extends StatelessWidget {
     return MaterialApp(
       title: 'WeatherFit',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(useMaterial3: true, colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF4A90E2))),
+      theme: ThemeData(
+        useMaterial3: true,
+        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF4A90E2)),
+      ),
       home: const WeatherScreen(),
     );
   }
@@ -50,6 +53,120 @@ class CityLocation {
     required this.lat,
     required this.lon,
   });
+}
+
+class ChatMessage {
+  final String text;
+  final bool isUser;
+  ChatMessage({required this.text, required this.isUser});
+}
+
+// ================== 1. AI HELPER (REST API) ==================
+class AiHelper {
+  // GANTI DENGAN API KEY GEMINI KAMU DI SINI
+  static const String _apiKey = 'YOUR_GEMINI_API_KEY';
+
+  static Future<String> askAi({
+    required String userQuestion,
+    required String weatherContext,
+    required String location,
+  }) async {
+    if (_apiKey == 'YOUR_GEMINI_API_KEY' || _apiKey.isEmpty) {
+      return '⚠️ API Key Gemini belum diatur di AiHelper.';
+    }
+
+    final url = Uri.parse(
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=$_apiKey',
+    );
+
+    final systemPrompt = '''
+Kamu adalah asisten cuaca Waterfit. Kamu menerima 3 data prakiraan cuaca (ECMWF, GFS, BMKG) untuk lokasi $location. Bandingkan ketiga data tersebut. Prioritaskan data BMKG jika ada perbedaan karena itu data lokal Indonesia. Jawab pertanyaan user: "$userQuestion" dengan bahasa santai. Sebutkan rekomendasi bawa payung dan jam terbaik untuk beraktivitas.
+''';
+
+    try {
+      final response = await http.post(
+        url,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          "system_instruction": {
+            "parts": [{"text": systemPrompt}]
+          },
+          "contents": [
+            {
+              "role": "user",
+              "parts": [{"text": "Data cuaca terkini: $weatherContext. Pertanyaan: $userQuestion"}]
+            }
+          ]
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final candidates = data['candidates'] as List?;
+        if (candidates != null && candidates.isNotEmpty) {
+          final content = candidates[0]['content'];
+          final parts = content['parts'] as List?;
+          if (parts != null && parts.isNotEmpty) {
+            return parts[0]['text'] ?? 'Tidak ada respons.';
+          }
+        }
+        return 'Gagal membaca respons dari AI.';
+      } else {
+        return 'Gagal terhubung ke server AI (${response.statusCode})';
+      }
+    } catch (e) {
+      return 'Terjadi kesalahan koneksi: $e';
+    }
+  }
+}
+
+// ================== 2. WIDGET MENU TITIK TIGA (POPUP MENU) ==================
+class CloudMenuButton extends StatelessWidget {
+  final String location;
+  final String weatherContext;
+
+  const CloudMenuButton({
+    super.key,
+    required this.location,
+    required this.weatherContext,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return PopupMenuButton<String>(
+      icon: const Icon(Icons.more_vert, color: Colors.white),
+      color: Colors.white,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      onSelected: (value) {
+        if (value == 'open_ai_chat') {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => ChatScreen(
+                location: location,
+                weatherContext: weatherContext,
+              ),
+            ),
+          );
+        }
+      },
+      itemBuilder: (context) => [
+        const PopupMenuItem(
+          value: 'open_ai_chat',
+          child: Row(
+            children: [
+              Icon(Icons.cloud_done, color: Color(0xFF4A90E2), size: 20),
+              SizedBox(width: 10),
+              Text(
+                'Help from the Clouds',
+                style: TextStyle(fontWeight: FontWeight.w600, color: Color(0xFF2C3E50)),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
 }
 
 // ================== SERVICE ==================
@@ -108,7 +225,61 @@ class WeatherService {
     return forecasts;
   }
 
-  // FITUR BARU: Pencarian Kota Global (bisa multiple results)
+  // Mengambil ringkasan cuaca per 3 jam dari 3 model (ECMWF, GFS, BMKG/Lokal)
+  Future<String> fetchWeatherContextSummary({
+    required double latitude,
+    required double longitude,
+  }) async {
+    Future<String> getModelHourly(String? modelParam) async {
+      final query = <String, String>{
+        'latitude': latitude.toString(),
+        'longitude': longitude.toString(),
+        'hourly': 'temperature_2m,precipitation_probability,weather_code',
+        'forecast_days': '1',
+        'timezone': 'auto',
+      };
+      if (modelParam != null) query['models'] = modelParam;
+
+      final uri = Uri.parse(_baseUrl).replace(queryParameters: query);
+      final res = await http.get(uri).timeout(const Duration(seconds: 15));
+      if (res.statusCode != 200) return 'Data tidak tersedia';
+
+      final data = jsonDecode(res.body);
+      final hourly = data['hourly'];
+      final times = hourly['time'] as List;
+      final temps = hourly['temperature_2m'] as List;
+      final probs = hourly['precipitation_probability'] as List;
+      final codes = hourly['weather_code'] as List;
+
+      final buffer = StringBuffer();
+      for (int i = 6; i <= 21; i += 3) {
+        if (i < times.length) {
+          final hourStr = (times[i] as String).split('T').last;
+          final desc = WeatherUtils.getWeatherDescription((codes[i] as num).toInt());
+          final temp = (temps[i] as num).round();
+          final prob = (probs[i] as num?)?.toInt() ?? 0;
+          buffer.writeln('Jam $hourStr: $desc, Suhu $temp°C, Hujan $prob%');
+        }
+      }
+      return buffer.toString();
+    }
+
+    final results = await Future.wait([
+      getModelHourly('ecmwf_ifs025'),      // 1. ECMWF
+      getModelHourly('ncep_gfs_seamless'), // 2. GFS
+      getModelHourly(null),                // 3. BMKG / Lokal
+    ]);
+
+    return '''
+[1. Data ECMWF]
+${results[0]}
+[2. Data GFS]
+${results[1]}
+[3. Data BMKG]
+${results[2]}
+''';
+  }
+
   Future<List<CityLocation>> searchGlobalCity(String query) async {
     final uri = Uri.parse(_geoUrl).replace(queryParameters: {
       'name': query,
@@ -242,7 +413,6 @@ class _WeatherScreenState extends State<WeatherScreen> {
     _loadWeather();
   }
 
-  // Fungsi saat user ngetik di kolom search
   Future<void> _onSearchChanged(String query) async {
     if (query.trim().length < 3) {
       setState(() => _searchResults = []);
@@ -257,9 +427,8 @@ class _WeatherScreenState extends State<WeatherScreen> {
     });
   }
 
-  // Fungsi saat user milih kota dari daftar
   void _selectCity(CityLocation city) {
-    FocusScope.of(context).unfocus(); // Tutup keyboard
+    FocusScope.of(context).unfocus();
     setState(() {
       _latitude = city.lat;
       _longitude = city.lon;
@@ -268,6 +437,40 @@ class _WeatherScreenState extends State<WeatherScreen> {
       _searchController.clear();
     });
     _loadWeather();
+  }
+
+  // Fungsi untuk mengambil ringkasan multi-model lalu membuka ChatScreen
+  void _openAiChat() async {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(child: CircularProgressIndicator(color: Colors.white)),
+    );
+
+    try {
+      final summary = await _service.fetchWeatherContextSummary(
+        latitude: _latitude,
+        longitude: _longitude,
+      );
+      if (!mounted) return;
+      Navigator.pop(context); // Tutup dialog loading
+
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => ChatScreen(
+            location: _displayCityName,
+            weatherContext: summary,
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      Navigator.pop(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Gagal menyiapkan data AI: $e')),
+      );
+    }
   }
 
   @override
@@ -308,8 +511,6 @@ class _WeatherScreenState extends State<WeatherScreen> {
                       ),
                     ),
                   ),
-                  
-                  // Dropdown hasil pencarian
                   if (_searchResults.isNotEmpty)
                     Container(
                       margin: const EdgeInsets.only(top: 8),
@@ -390,7 +591,40 @@ class _WeatherScreenState extends State<WeatherScreen> {
                     Text(_displayCityName, style: const TextStyle(color: Colors.white70, fontSize: 14)),
                   ],
                 ),
-                IconButton(onPressed: _loadWeather, icon: const Icon(Icons.refresh, color: Colors.white)),
+                // Tombol Refresh dan Menu Titik Tiga Hub ke AI
+                Row(
+                  children: [
+                    IconButton(
+                      onPressed: _loadWeather, 
+                      icon: const Icon(Icons.refresh, color: Colors.white),
+                    ),
+                    PopupMenuButton<String>(
+                      icon: const Icon(Icons.more_vert, color: Colors.white),
+                      color: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      onSelected: (value) {
+                        if (value == 'open_ai_chat') {
+                          _openAiChat();
+                        }
+                      },
+                      itemBuilder: (context) => [
+                        const PopupMenuItem(
+                          value: 'open_ai_chat',
+                          child: Row(
+                            children: [
+                              Icon(Icons.cloud_done, color: Color(0xFF4A90E2), size: 20),
+                              SizedBox(width: 10),
+                              Text(
+                                'Help from the Clouds',
+                                style: TextStyle(fontWeight: FontWeight.w600, color: Color(0xFF2C3E50)),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ],
             ),
             const SizedBox(height: 24),
@@ -520,124 +754,6 @@ class _WeatherScreenState extends State<WeatherScreen> {
               Text('${today.tempMax.round()}°', style: const TextStyle(color: Colors.white, fontSize: 64, fontWeight: FontWeight.w200, height: 1)),
               Text(WeatherUtils.getWeatherDescription(today.weatherCode), style: const TextStyle(color: Colors.white70, fontSize: 16)),
               Text('Min ${today.tempMin.round()}° • Hujan ${today.precipitationProbability}%', style: const TextStyle(color: Colors.white60, fontSize: 13)),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
-import 'dart:convert';
-
-// ================== 1. AI HELPER (REST API) ==================
-class AiHelper {
-  // GANTI DENGAN API KEY GEMINI KAMU DI SINI
-  static const String _apiKey = 'YOUR_GEMINI_API_KEY';
-
-  static Future<String> askAi({
-    required String userQuestion,
-    required String weatherContext,
-    required String location,
-  }) async {
-    if (_apiKey == 'YOUR_GEMINI_API_KEY' || _apiKey.isEmpty) {
-      return '⚠️ API Key Gemini belum diatur di AiHelper.';
-    }
-
-    final url = Uri.parse(
-      'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=$_apiKey',
-    );
-
-    final systemPrompt = '''
-Kamu adalah asisten cuaca Waterfit. Kamu menerima 3 data prakiraan cuaca (ECMWF, GFS, BMKG) untuk lokasi $location. Bandingkan ketiga data tersebut. Prioritaskan data BMKG jika ada perbedaan karena itu data lokal Indonesia. Jawab pertanyaan user: "$userQuestion" dengan bahasa santai. Sebutkan rekomendasi bawa payung dan jam terbaik untuk beraktivitas.
-''';
-
-    try {
-      final response = await http.post(
-        url,
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          "system_instruction": {
-            "parts": [{"text": systemPrompt}]
-          },
-          "contents": [
-            {
-              "role": "user",
-              "parts": [{"text": "Data cuaca terkini: $weatherContext. Pertanyaan: $userQuestion"}]
-            }
-          ]
-        }),
-      );
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        final candidates = data['candidates'] as List?;
-        if (candidates != null && candidates.isNotEmpty) {
-          final content = candidates[0]['content'];
-          final parts = content['parts'] as List?;
-          if (parts != null && parts.isNotEmpty) {
-            return parts[0]['text'] ?? 'Tidak ada respons.';
-          }
-        }
-        return 'Gagal membaca respons dari AI.';
-      } else {
-        return 'Gagal terhubung ke server AI (${response.statusCode})';
-      }
-    } catch (e) {
-      return 'Terjadi kesalahan koneksi: $e';
-    }
-  }
-}
-
-class ChatMessage {
-  final String text;
-  final bool isUser;
-  ChatMessage({required this.text, required this.isUser});
-}
-
-// ================== 2. WIDGET MENU TITIK TIGA (POPUP MENU) ==================
-class CloudMenuButton extends StatelessWidget {
-  final String location;
-  final String weatherContext;
-
-  const CloudMenuButton({
-    super.key,
-    required this.location,
-    required this.weatherContext,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return PopupMenuButton<String>(
-      icon: const Icon(Icons.more_vert, color: Colors.white),
-      color: Colors.white,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      onSelected: (value) {
-        if (value == 'open_ai_chat') {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => ChatScreen(
-                location: location,
-                weatherContext: weatherContext,
-              ),
-            ),
-          );
-        }
-      },
-      itemBuilder: (context) => [
-        const PopupMenuItem(
-          value: 'open_ai_chat',
-          child: Row(
-            children: [
-              Icon(Icons.cloud_done, color: Color(0xFF4A90E2), size: 20),
-              SizedBox(width: 10),
-              Text(
-                'Help from the Clouds',
-                style: TextStyle(fontWeight: FontWeight.w600, color: Color(0xFF2C3E50)),
-              ),
             ],
           ),
         ),
@@ -787,7 +903,4 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 }
 
-
-
-
-
+                              
