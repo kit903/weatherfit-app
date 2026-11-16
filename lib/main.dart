@@ -109,8 +109,13 @@ class AiHelper {
     required String weatherContext,
     required String location,
   }) async {
+    // System prompt diperketat agar AI realistis dan tidak asal menyuruh bawa payung jika cuaca cerah/berawan
     final systemPrompt = '''
-Kamu adalah asisten cuaca Waterfit. Kamu menerima 3 data prakiraan cuaca (ECMWF, GFS, BMKG) untuk lokasi $location. Bandingkan ketiga data tersebut. Prioritaskan data BMKG jika ada perbedaan. Jawab pertanyaan user: "$userQuestion" dengan bahasa santai. Sebutkan rekomendasi bawa payung dan jam terbaik. Jawab SANGAT SINGKAT (maksimal 2 paragraf).
+Kamu adalah asisten cuaca digital Weatherfit yang cerdas, logis, dan santai. 
+Kamu menerima data prakiraan cuaca multi-model (ECMWF, GFS, BMKG) untuk lokasi $location.
+PENTING: Analisis data dengan jujur sesuai kondisi saat ini. Jangan berasumsi akan hujan lebat jika data jam-jam terdekat menunjukkan probabilitas hujan kecil atau cerah/berawan. 
+Sesuaikan rekomendasi payung dengan persentase hujan aktual (bawa payung hanya jika peluang hujan >= 30% atau cuaca mendung/hujan).
+Jawab pertanyaan user: "$userQuestion" dengan bahasa santai, ramah, dan SANGAT SINGKAT (maksimal 2 paragraf).
 ''';
 
     final modelsToTry = [
@@ -175,7 +180,6 @@ Kamu adalah asisten cuaca Waterfit. Kamu menerima 3 data prakiraan cuaca (ECMWF,
     final umbrellaYes = [
       "Waduh, sepertinya langit di $location lagi kurang bersahabat nih. Berdasarkan data cuaca, potensi hujannya cukup tinggi. Saran gua, sedia payung atau jas hujan di tas ya bro! ☂️",
       "Kalo ngeliat kondisi cuaca terkini di $location, risikonya lumayan gede buat turun hujan. Jangan lupa bawa payung biar aktivitas lu ga berantakan di jalan! 🌧️",
-      "Siapin payung deh buat berjaga-jaga di $location hari ini. Prediksi cuaca nunjukin ada potensi tetesan air dari langit yang lumayan sering. Stay safe ya! 🧥",
     ];
 
     final umbrellaNo = [
@@ -186,8 +190,7 @@ Kamu adalah asisten cuaca Waterfit. Kamu menerima 3 data prakiraan cuaca (ECMWF,
 
     final timeOrGeneral = [
       "Melihat pergerakan data cuaca di $location, transisi dari pagi ke sore hari bakal cukup dinamis. Pastikan lu cek grafik jam di halaman utama aplikasi buat tau detail pastinya ya!",
-      "Kondisi udara dan suhu di $location terpantau fluktuatif. Buat waktu terbaik beraktivitas, lu bisa manfaatkan rentang jam pagi sebelum potensi cuaca berubah di siang hari.",
-      "Prakiraan multi-model untuk $location merangkum cuaca yang cukup bervariasi hari ini. Tetap pantau indikator persentase hujan di aplikasi biar lu bisa ambil keputusan pas!",
+      "Kondisi udara dan suhu di $location terpantau stabil. Buat waktu terbaik beraktivitas, lu bisa manfaatkan rentang jam yang cerah di aplikasi!",
     ];
 
     if (qLower.contains('payung') || qLower.contains('hujan') || qLower.contains('bawa') || qLower.contains('keluar')) {
@@ -333,7 +336,7 @@ class WeatherService {
       final codes = hourly['weather_code'] as List;
 
       final buffer = StringBuffer();
-      for (int i = 6; i <= 21; i += 3) {
+      for (int i = 0; i < times.length; i += 2) {
         if (i < times.length) {
           final hourStr = (times[i] as String).split('T').last;
           final desc = WeatherUtils.getWeatherDescription((codes[i] as num).toInt());
@@ -456,9 +459,9 @@ class WeatherLoadingWidget extends StatefulWidget {
 class _WeatherLoadingWidgetState extends State<WeatherLoadingWidget> {
   int _iconIndex = 0;
   final List<IconData> _icons = [
-    Icons.wb_sunny,         // Cerah
-    Icons.cloud,            // Berawan
-    Icons.thunderstorm,     // Badai Petir
+    Icons.wb_sunny,
+    Icons.cloud,
+    Icons.thunderstorm,
   ];
   final List<String> _labels = [
     'Memindai langit cerah...',
