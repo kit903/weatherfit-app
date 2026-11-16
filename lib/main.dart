@@ -128,7 +128,7 @@ Kamu adalah asisten cuaca Waterfit. Kamu menerima 3 data prakiraan cuaca (ECMWF,
               final content = message?['content']?.toString().trim();
               
               if (content != null && content.isNotEmpty) {
-                return {'text': content, 'fallback': false}; // Berhasil pakai AI Asli (Live AI)
+                return {'text': content, 'fallback': false}; // Berhasil pakai Live AI
               }
             }
           }
@@ -141,7 +141,7 @@ Kamu adalah asisten cuaca Waterfit. Kamu menerima 3 data prakiraan cuaca (ECMWF,
     // Jeda buatan sebentar agar natural
     await Future.delayed(const Duration(milliseconds: 400));
 
-    // 🛡️ DYNAMIC SMART FALLBACK (Variasi teks dinamis agar tidak kaku/membosankan)
+    // 🛡️ DYNAMIC SMART FALLBACK
     return {'text': _generateDynamicFallbackAnswer(userQuestion, weatherContext, location), 'fallback': true};
   }
 
@@ -786,7 +786,6 @@ class _ChatScreenState extends State<ChatScreen> {
   final ScrollController _scrollController = ScrollController();
   bool _isLoading = false;
   
-  // Status titik indikator di AppBar (Default merah bintik untuk Local Fallback)
   bool _isLastUsingFallback = true; 
 
   @override
@@ -810,7 +809,6 @@ class _ChatScreenState extends State<ChatScreen> {
     });
     _scrollToBottom();
 
-    // Panggil AiHelper yang mendukung Live AI + Smart Fallback
     final result = await AiHelper.askAi(
       userQuestion: text,
       weatherContext: widget.weatherContext,
@@ -826,7 +824,6 @@ class _ChatScreenState extends State<ChatScreen> {
         isUser: false,
         isUsingFallback: isFallbackActive,
       ));
-      // Update status indikator titik AppBar sesuai respons terakhir
       _isLastUsingFallback = isFallbackActive; 
       _isLoading = false;
     });
@@ -860,7 +857,6 @@ class _ChatScreenState extends State<ChatScreen> {
                 style: TextStyle(color: Colors.white, fontSize: 18),
               ),
             ),
-            // Indikator Titik Status (Merah bintik = Local, Hijau = Live AI)
             Container(
               margin: const EdgeInsets.only(right: 8),
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
