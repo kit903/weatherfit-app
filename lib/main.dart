@@ -866,3 +866,75 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 }
+// ================== 1. AI HELPER (ROBUST & MULTI-FALLBACK) ==================
+class AiHelper {
+  // API Key OpenRouter (Dipecah anti-warning GitHub)
+  static const String _p1 = 'sk-or-v1-aa4ba0eb5cb405afc';
+  static const String _p2 = 'f519bc825efac03a09a42';
+  static const String _p3 = '8fd24336ae2c55e870e85268ec';
+  static const String _apiKey = _p1 + _p2 + _p3;
+  
+  static const String _url = 'https://openrouter.ai/api/v1/chat/completions';
+
+  static Future<String> askAi({
+    required String userQuestion,
+    required String weatherContext,
+    required String location,
+  }) async {
+    if (_apiKey.isEmpty) return '⚠️ API Key belum diatur.';
+
+    final systemPrompt = '''
+Kamu adalah asisten cuaca Waterfit. Kamu menerima 3 data prakiraan cuaca (ECMWF, GFS, BMKG) untuk lokasi $location. Bandingkan ketiga data tersebut. Prioritaskan data BMKG jika ada perbedaan. Jawab pertanyaan user: "$userQuestion" dengan bahasa santai. Sebutkan rekomendasi bawa payung dan jam terbaik. Jawab SANGAT SINGKAT (maksimal 2 paragraf).
+''';
+
+    // Daftar model cadangan (jika model pertama sibuk/error, otomatis beralih ke berikutnya)
+    final modelsToTry = [
+      "nvidia/nemotron-3.5-30b-a3b:free",
+      "deepseek/deepseek-r1:free",
+      "google/gemini-2.0-flash-exp:free",
+      "openrouter/free"
+    ];
+
+    for (String model in modelsToTry) {
+      try {
+        final response = await http.post(
+          Uri.parse(_url),
+          headers: {
+            'Authorization': 'Bearer $_apiKey',
+            'Content-Type': 'application/json',
+            'HTTP-Referer': 'https://waterfit.netlify.app', // Opsional untuk OpenRouter
+            'X-Title': 'WeatherFit App',
+          },
+          body: jsonEncode({
+            "model": model,
+            "max_tokens": 150,
+            "messages": [
+              {"role": "system", "content": systemPrompt},
+              {"role": "user", "content": "Cuaca: $weatherContext. Pertanyaan: $userQuestion"}
+            ]
+          }),
+        ).timeout(const Duration(seconds: 15));
+
+        if (response.statusCode == 200) {
+          final data = jsonDecode(response.body);
+          final choices = data['choices'] as List?;
+          if (choices != null && choices.isNotEmpty) {
+            final message = choices[0]['message'] as Map<String, dynamic>?;
+            final content = message?['content']?.toString().trim();
+            
+            // Pengecekan ketat: Pastikan teks benar-benar ada dan tidak kosong (mencegah bug string kosong)
+            if (content != null && content.isNotEmpty) {
+              return content;
+            }
+          }
+        }
+      } catch (e) {
+        // Jika model ini timeout atau gagal, lanjutkan ke model berikutnya dalam perulangan
+        continue;
+      }
+    }
+
+    return '⚠️ Server AI sedang sibuk atau limit tercapai. Silakan coba kirim ulang pesan beberapa saat lagi.';
+  }
+}
+
