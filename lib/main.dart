@@ -40,6 +40,22 @@ class DailyForecast {
   });
 }
 
+class HourlyForecast {
+  final DateTime time;
+  final double temp;
+  final int precipitationProbability;
+  final double precipitation;
+  final int weatherCode;
+
+  HourlyForecast({
+    required this.time,
+    required this.temp,
+    required this.precipitationProbability,
+    required this.precipitation,
+    required this.weatherCode,
+  });
+}
+
 class CityLocation {
   final String name;
   final String country;
@@ -59,7 +75,7 @@ class CityLocation {
 class ChatMessage {
   final String text;
   final bool isUser;
-  final bool isUsingFallback; // Status apakah pesan ini dari local fallback
+  final bool isUsingFallback;
 
   ChatMessage({
     required this.text, 
@@ -68,7 +84,6 @@ class ChatMessage {
   });
 }
 
-// Model hasil AI untuk menghindari konflik kurung sudut (< >)
 class AiResult {
   final String text;
   final bool fallback;
@@ -78,7 +93,6 @@ class AiResult {
 
 // ================== 1. AI HELPER (SMART & GITHUB-SAFE) ==================
 class AiHelper {
-  // Dirakit saat runtime agar lolos dari deteksi Secret Scanner GitHub
   static String get _apiKey {
     final k1 = ['s', 'k', '-', 'o', 'r', '-', 'v', '1'].join();
     final k2 = '-aa4ba0eb5cb405afcf519bc82';
@@ -135,7 +149,7 @@ Kamu adalah asisten cuaca Waterfit. Kamu menerima 3 data prakiraan cuaca (ECMWF,
               final content = message?['content']?.toString().trim();
               
               if (content != null && content.isNotEmpty) {
-                return AiResult(text: content, fallback: false); // Berhasil pakai Live AI
+                return AiResult(text: content, fallback: false);
               }
             }
           }
@@ -145,10 +159,8 @@ Kamu adalah asisten cuaca Waterfit. Kamu menerima 3 data prakiraan cuaca (ECMWF,
       }
     }
 
-    // Jeda buatan sebentar agar natural
     await Future.delayed(const Duration(milliseconds: 400));
 
-    // 🛡️ DYNAMIC SMART FALLBACK
     return AiResult(
       text: _generateDynamicFallbackAnswer(userQuestion, weatherContext, location), 
       fallback: true,
@@ -243,6 +255,57 @@ class WeatherService {
       ));
     }
     return forecasts;
+  }
+
+  // Service untuk mengambil detail akurat 24 jam (per jam)
+  Future<List<HourlyForecast>> fetchHourlyForecast({
+    required double latitude,
+    required double longitude,
+    required String model,
+  }) async {
+    final query = <String, String>{
+      'latitude': latitude.toString(),
+      'longitude': longitude.toString(),
+      'hourly': 'temperature_2m,precipitation_probability,precipitation,weather_code',
+      'forecast_days': '2',
+      'timezone': 'auto',
+    };
+    if (model != 'best_match') query['models'] = model;
+    
+    final uri = Uri.parse(_baseUrl).replace(queryParameters: query);
+    final response = await http.get(uri).timeout(const Duration(seconds: 15));
+    if (response.statusCode != 200) throw Exception('Server error hourly');
+    
+    final json = jsonDecode(response.body) as Map<String, dynamic>;
+    final hourly = json['hourly'] as Map<String, dynamic>?;
+    if (hourly == null) throw Exception('Data hourly tidak tersedia');
+    
+    final times = hourly['time'] as List?;
+    final temps = hourly['temperature_2m'] as List?;
+    final probs = hourly['precipitation_probability'] as List?;
+    final precips = hourly['precipitation'] as List?;
+    final codes = hourly['weather_code'] as List?;
+    
+    if (times == null || temps == null || probs == null || codes == null) {
+      throw Exception('Data hourly tidak lengkap');
+    }
+
+    final now = DateTime.now();
+    final list = <HourlyForecast>[];
+    for (int i = 0; i < times.length; i++) {
+      final t = DateTime.parse(times[i] as String);
+      // Ambil mulai dari waktu terdekat sekarang hingga 24 jam ke depan
+      if (t.isAfter(now.subtract(const Duration(hours: 1)))) {
+        list.add(HourlyForecast(
+          time: t,
+          temp: (temps[i] as num).toDouble(),
+          precipitationProbability: (probs[i] as num?)?.toInt() ?? 0,
+          precipitation: precips != null ? (precips[i] as num).toDouble() : 0.0,
+          weatherCode: (codes[i] as num).toInt(),
+        ));
+      }
+    }
+    return list;
   }
 
   Future<String> fetchWeatherContextSummary({
@@ -393,6 +456,7 @@ class WeatherScreen extends StatefulWidget {
 class _WeatherScreenState extends State<WeatherScreen> {
   final WeatherService _service = WeatherService();
   List<DailyForecast>? _weather;
+  List<HourlyForecast>? _hourlyWeather;
   bool _loading = true;
   String? _error;
   String _selectedModel = 'best_match';
@@ -414,13 +478,17 @@ class _WeatherScreenState extends State<WeatherScreen> {
   Future<void> _loadWeather() async {
     setState(() { _loading = true; _error = null; });
     try {
-      final data = await _service.fetchWeather(
-        latitude: _latitude,
-        longitude: _longitude,
-        model: _selectedModel,
-      );
+      final results = await Future.wait([
+        _service.fetchWeather(latitude: _latitude, longitude: _longitude, model: _selectedModel),
+        _service.fetchHourlyForecast(latitude: _latitude, longitude: _longitude, model: _selectedModel),
+      ]);
+      
       if (!mounted) return;
-      setState(() { _weather = data; _loading = false; });
+      setState(() { 
+        _weather = results[0] as List<DailyForecast>; 
+        _hourlyWeather = results[1] as List<HourlyForecast>;
+        _loading = false; 
+      });
     } catch (e) {
       if (!mounted) return;
       setState(() { _error = e.toString().replaceFirst('Exception: ', ''); _loading = false; });
@@ -646,6 +714,16 @@ class _WeatherScreenState extends State<WeatherScreen> {
             _buildCurrentWeather(today),
             const SizedBox(height: 24),
             _buildUmbrellaRecommendation(today.precipitationProbability),
+            
+            // ==========================================
+            // UI TERPISAH: PRAKIRAAN 24 JAM (PER JAM)
+            // ==========================================
+            const SizedBox(height: 24),
+            _buildHourlySection(),
+
+            // ==========================================
+            // UI TERPISAH: PRAKIRAAN 10 HARI (HARIAN)
+            // ==========================================
             const SizedBox(height: 24),
             const Text('Prakiraan 10 Hari', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600)),
             const SizedBox(height: 12),
@@ -659,6 +737,59 @@ class _WeatherScreenState extends State<WeatherScreen> {
           ],
         ),
       ),
+    );
+  }
+
+  // Widget Bagian Prakiraan 24 Jam (Horizontal Card Section)
+  Widget _buildHourlySection() {
+    if (_hourlyWeather == null || _hourlyWeather!.isEmpty) return const SizedBox.shrink();
+    final items = _hourlyWeather!.take(24).toList(); // Tampilkan 24 jam ke depan
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('Prakiraan 24 Jam (Per Jam)', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600)),
+        const SizedBox(height: 12),
+        SizedBox(
+          height: 135,
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            itemCount: items.length,
+            itemBuilder: (context, index) {
+              final h = items[index];
+              final timeStr = '${h.time.hour.toString().padLeft(2, '0')}:00';
+              final rainColor = h.precipitationProbability >= 60 ? const Color(0xFFE74C3C) : h.precipitationProbability >= 30 ? const Color(0xFFF39C12) : const Color(0xFF3498DB);
+              
+              return Container(
+                width: 85,
+                margin: const EdgeInsets.only(right: 10),
+                padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.08), blurRadius: 8, offset: const Offset(0, 2))],
+                ),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children: [
+                    Text(timeStr, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF2C3E50))),
+                    Icon(WeatherUtils.getWeatherIcon(h.weatherCode), color: const Color(0xFF4A90E2), size: 26),
+                    Text('${h.temp.round()}°', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF2C3E50))),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.water_drop, size: 10, color: rainColor),
+                        const SizedBox(width: 2),
+                        Text('${h.precipitationProbability}%', style: TextStyle(fontSize: 11, color: rainColor, fontWeight: FontWeight.bold)),
+                      ],
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ),
+      ],
     );
   }
 
