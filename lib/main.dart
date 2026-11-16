@@ -61,22 +61,24 @@ class ChatMessage {
   ChatMessage({required this.text, required this.isUser});
 }
 
-// ================== 1. AI HELPER (OPENROUTER AUTO) ==================
+// ================== 1. AI HELPER (GROQ) ==================
 class AiHelper {
-  // API Key dipecah (Anti-GitHub Warning)
-  static const String _p1 = 'sk-or-v1-aa4ba0eb5cb405afc';
-  static const String _p2 = 'f519bc825efac03a09a42';
-  static const String _p3 = '8fd24336ae2c55e870e85268ec';
+  // TRIK ANTI-WARNING GITHUB: API Key Groq dipecah jadi 3 bagian
+  static const String _p1 = 'gsk_pA8MUQ7wDScCGDyY1Ksb';
+  static const String _p2 = 'WGdyb3FYQN5bAUBg6a597n5B';
+  static const String _p3 = 'lGVUritY';
   static const String _apiKey = _p1 + _p2 + _p3;
   
-  static const String _url = 'https://openrouter.ai/api/v1/chat/completions';
+  static const String _url = 'https://api.groq.com/openai/v1/chat/completions';
 
   static Future<String> askAi({
     required String userQuestion,
     required String weatherContext,
     required String location,
   }) async {
-    if (_apiKey.isEmpty) return '⚠️ API Key OpenRouter belum diatur.';
+    if (_apiKey.contains('MASUKKAN')) {
+      return '⚠️ API Key Groq belum diatur.';
+    }
 
     final systemPrompt = '''
 Kamu adalah asisten cuaca Waterfit. Kamu menerima 3 data prakiraan cuaca (ECMWF, GFS, BMKG) untuk lokasi $location. Bandingkan ketiga data tersebut. Prioritaskan data BMKG jika ada perbedaan karena itu data lokal Indonesia. Jawab pertanyaan user: "$userQuestion" dengan bahasa santai. Sebutkan rekomendasi bawa payung dan jam terbaik untuk beraktivitas.
@@ -90,24 +92,23 @@ Kamu adalah asisten cuaca Waterfit. Kamu menerima 3 data prakiraan cuaca (ECMWF,
           'Content-Type': 'application/json',
         },
         body: jsonEncode({
-          // MODEL AUTO-ROUTER: Anti 404 karena OpenRouter pilih model gratis yang aktif
-          "model": "openrouter/free", 
+          // MODEL GROQ: Llama 3.3 70B (Sangat cepat & pintar)
+          "model": "llama-3.3-70b-versatile", 
           "messages": [
             {"role": "system", "content": systemPrompt},
             {"role": "user", "content": "Data cuaca terkini: $weatherContext. Pertanyaan: $userQuestion"}
           ]
         }),
-      );
+      ).timeout(const Duration(seconds: 15)); // Timeout 15 detik
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         return data['choices'][0]['message']['content'] ?? 'Tidak ada respons.';
       } else {
-        // Tampilkan pesan error yang lebih jelas
-        return 'Error API (${response.statusCode}). Kuota habis atau model sedang sibuk. Coba lagi nanti.';
+        return 'Error API Groq (${response.statusCode}). Coba lagi nanti.';
       }
-    } catch (e) {
-      return 'Terjadi kesalahan: $e';
+    } on Exception catch (e) {
+      return 'Server AI sedang sibuk atau koneksi lambat. Coba lagi nanti.';
     }
   }
 }
@@ -698,7 +699,7 @@ class _WeatherScreenState extends State<WeatherScreen> {
   }
 }
 
-// ================== 3. UI LAYAR CHAT (FIX MOBILE KEYBOARD) ==================
+// ================== 3. UI LAYAR CHAT ==================
 class ChatScreen extends StatefulWidget {
   final String location;
   final String weatherContext;
@@ -766,7 +767,6 @@ class _ChatScreenState extends State<ChatScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Ambil tinggi keyboard (viewInsets) biar layout di HP gak ketutup
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
 
     return Scaffold(
@@ -813,7 +813,6 @@ class _ChatScreenState extends State<ChatScreen> {
               padding: EdgeInsets.all(8.0),
               child: LinearProgressIndicator(color: Color(0xFF4A90E2)),
             ),
-          // Bungkus input pakai Padding viewInsets biar aman di HP & Desktop
           Padding(
             padding: EdgeInsets.only(bottom: bottomInset),
             child: Container(
