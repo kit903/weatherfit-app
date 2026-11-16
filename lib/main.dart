@@ -68,14 +68,10 @@ class ChatMessage {
   });
 }
 
-// ================== 1. AI HELPER (SMART & DYNAMIC LOCAL FALLBACK) ==================
+// ================== 1. AI HELPER (GITHUB-SAFE & SMART FALLBACK) ==================
 class AiHelper {
-  // API Key OpenRouter (Dipecah anti-warning GitHub)
-  static const String _p1 = 'sk-or-v1-aa4ba0eb5cb405afc';
-  static const String _p2 = 'f519bc825efac03a09a42';
-  static const String _p3 = '8fd24336ae2c55e870e85268ec';
-  static const String _apiKey = _p1 + _p2 + _p3;
-  
+  // Dikosongkan agar 100% aman dari blokir/scan Secret Scanning GitHub
+  static const String _apiKey = ''; 
   static const String _url = 'https://openrouter.ai/api/v1/chat/completions';
 
   // Return Map berisi text jawaban dan status apakah menggunakan fallback
@@ -133,6 +129,9 @@ Kamu adalah asisten cuaca Waterfit. Kamu menerima 3 data prakiraan cuaca (ECMWF,
         }
       }
     }
+
+    // Berikan sedikit jeda buatan agar terasa natural saat memproses fallback
+    await Future.delayed(const Duration(milliseconds: 500));
 
     // 🛡️ DYNAMIC SMART FALLBACK (Variasi teks dinamis agar tidak kaku/membosankan)
     return {'text': _generateDynamicFallbackAnswer(userQuestion, weatherContext, location), 'fallback': true};
@@ -804,7 +803,7 @@ class _ChatScreenState extends State<ChatScreen> {
     });
     _scrollToBottom();
 
-    // Panggil AI Helper yang sudah mendukung smart dynamic fallback
+    // Panggil AI Helper (karena API key kosong, otomatis menggunakan dynamic local fallback yang dinamis)
     final result = await AiHelper.askAi(
       userQuestion: text,
       weatherContext: widget.weatherContext,
