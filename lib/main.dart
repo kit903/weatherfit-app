@@ -92,18 +92,15 @@ class AiResult {
   AiResult({required this.text, required this.fallback});
 }
 
-// Model untuk peringatan BMKG
 class BmkgWarning {
   final String title;
   final String description;
-  final String severity; // "Merah", "Kuning", "Hijau"
-  final String pubDate;
+  final String severity; 
 
   BmkgWarning({
     required this.title,
     required this.description,
     required this.severity,
-    required this.pubDate,
   });
 }
 
@@ -406,34 +403,24 @@ ${results[2]}
     return [];
   }
 
-  // Fungsi untuk mengambil peringatan dini BMKG (XML Parsing Manual)
   Future<List<BmkgWarning>> fetchBmkgAlerts() async {
     try {
       final response = await http.get(Uri.parse(_bmkgAlertUrl)).timeout(const Duration(seconds: 15));
       if (response.statusCode != 200) return [];
 
       final xmlString = response.body;
-      // Parsing XML manual sederhana untuk mengambil item <item>
       final itemRegex = RegExp(r'<item>(.*?)</item>', dotAll: true);
       final matches = itemRegex.allMatches(xmlString);
 
       List<BmkgWarning> warnings = [];
       for (var match in matches) {
         final itemContent = match.group(1) ?? '';
-        
-        // Ekstrak Title
         final titleMatch = RegExp(r'<title>(.*?)</title>', dotAll: true).firstMatch(itemContent);
         final title = titleMatch?.group(1)?.replaceAll(RegExp(r'<!\[CDATA\[|\]\]>'), '').trim() ?? 'Peringatan Cuaca';
         
-        // Ekstrak Description
         final descMatch = RegExp(r'<description>(.*?)</description>', dotAll: true).firstMatch(itemContent);
         final desc = descMatch?.group(1)?.replaceAll(RegExp(r'<!\[CDATA\[|\]\]>'), '').trim() ?? 'Wilayah terdampak.';
-        
-        // Ekstrak PubDate
-        final dateMatch = RegExp(r'<pubDate>(.*?)</pubDate>', dotAll: true).firstMatch(itemContent);
-        final pubDate = dateMatch?.group(1)?.trim() ?? '';
 
-        // Tentukan Severity berdasarkan kata kunci di deskripsi (simulasi karena RSS tidak menyediakan tag severity langsung)
         String severity = 'Hijau';
         if (desc.toLowerCase().contains('lebat') || desc.toLowerCase().contains('petir') || desc.toLowerCase().contains('angin kencang')) {
           severity = 'Merah';
@@ -445,7 +432,6 @@ ${results[2]}
           title: title,
           description: desc,
           severity: severity,
-          pubDate: pubDate,
         ));
       }
       return warnings;
@@ -714,7 +700,7 @@ class _WeatherScreenState extends State<WeatherScreen> {
   void _openWeatherMap() {
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (context) => const AsiaPacificMapScreen()),
+      MaterialPageRoute(builder: (context) => const IndonesiaMapScreen()),
     );
   }
 
@@ -1091,15 +1077,15 @@ class _WeatherScreenState extends State<WeatherScreen> {
   }
 }
 
-// ================== 2. PETA PERINGATAN INDONESIA (BMKG LIVE + SIMULASI VISUAL) ==================
-class AsiaPacificMapScreen extends StatefulWidget {
-  const AsiaPacificMapScreen({super.key});
+// ================== 2. PETA PERINGATAN DINI (STATIC OSM MAP) ==================
+class IndonesiaMapScreen extends StatefulWidget {
+  const IndonesiaMapScreen({super.key});
 
   @override
-  State<AsiaPacificMapScreen> createState() => _AsiaPacificMapScreenState();
+  State<IndonesiaMapScreen> createState() => _IndonesiaMapScreenState();
 }
 
-class _AsiaPacificMapScreenState extends State<AsiaPacificMapScreen> {
+class _IndonesiaMapScreenState extends State<IndonesiaMapScreen> {
   final TransformationController _transformationController = TransformationController();
   final WeatherService _service = WeatherService();
   List<BmkgWarning> _warnings = [];
@@ -1129,6 +1115,9 @@ class _AsiaPacificMapScreenState extends State<AsiaPacificMapScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Static Map URL for OpenStreetMap (No library required)
+    final String osmUrl = 'https://staticmap.openstreetmap.de/staticmap.php?center=-2.548926,118.014863&zoom=4&size=1000x800&maptype=mapnik';
+
     return Scaffold(
       backgroundColor: const Color(0xFF0F172A),
       appBar: AppBar(
@@ -1141,7 +1130,6 @@ class _AsiaPacificMapScreenState extends State<AsiaPacificMapScreen> {
       ),
       body: Column(
         children: [
-          // Banner Masa Berlaku
           Container(
             margin: const EdgeInsets.all(12),
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -1167,7 +1155,7 @@ class _AsiaPacificMapScreenState extends State<AsiaPacificMapScreen> {
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: const Text(
-                    '14:30 - 18:00 WIB', // Diubah ke WIB karena fokus Indonesia
+                    '14:30 - 18:00 WIB',
                     style: TextStyle(color: Color(0xFF60A5FA), fontSize: 13, fontWeight: FontWeight.bold),
                   ),
                 ),
@@ -1175,7 +1163,6 @@ class _AsiaPacificMapScreenState extends State<AsiaPacificMapScreen> {
             ),
           ),
           
-          // Peta Interaktif (Simulasi Visual)
           Expanded(
             flex: 3,
             child: Container(
@@ -1194,12 +1181,32 @@ class _AsiaPacificMapScreenState extends State<AsiaPacificMapScreen> {
                 child: Stack(
                   children: [
                     Positioned.fill(
-                      child: CustomPaint(painter: GridPainter()),
-                    ),
-                    Positioned.fill(
-                      child: CustomPaint(
-                        painter: IndonesiaWeatherMapPainter(),
+                      child: Image.network(
+                        osmUrl,
+                        fit: BoxFit.cover,
+                        loadingBuilder: (context, child, loadingProgress) {
+                          if (loadingProgress == null) return child;
+                          return const Center(child: CircularProgressIndicator(color: Color(0xFF60A5FA)));
+                        },
+                        errorBuilder: (context, error, stackTrace) {
+                          return const Center(child: Text('Gagal memuat peta.', style: TextStyle(color: Colors.white)));
+                        },
                       ),
+                    ),
+                    const Positioned(
+                      top: 150,
+                      left: 250,
+                      child: Icon(Icons.location_on, color: Colors.red, size: 40),
+                    ),
+                    const Positioned(
+                      top: 200,
+                      left: 300,
+                      child: Icon(Icons.location_on, color: Colors.amber, size: 40),
+                    ),
+                    const Positioned(
+                      top: 350,
+                      left: 450,
+                      child: Icon(Icons.location_on, color: Colors.green, size: 40),
                     ),
                     Positioned(
                       top: 12,
@@ -1211,7 +1218,7 @@ class _AsiaPacificMapScreenState extends State<AsiaPacificMapScreen> {
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: const Text(
-                          'Zoom: 1.0x (Level Kabupaten/Kota)',
+                          'Peta OpenStreetMap (Static)',
                           style: TextStyle(color: Colors.white70, fontSize: 11),
                         ),
                       ),
@@ -1222,7 +1229,6 @@ class _AsiaPacificMapScreenState extends State<AsiaPacificMapScreen> {
             ),
           ),
           
-          // Legenda
           Container(
             margin: const EdgeInsets.all(12),
             padding: const EdgeInsets.all(12),
@@ -1240,7 +1246,6 @@ class _AsiaPacificMapScreenState extends State<AsiaPacificMapScreen> {
             ),
           ),
 
-          // Daftar Peringatan (Live dari BMKG)
           Expanded(
             flex: 2,
             child: _isLoadingWarnings
@@ -1331,168 +1336,6 @@ class _AsiaPacificMapScreenState extends State<AsiaPacificMapScreen> {
       ),
     );
   }
-}
-
-// ================== CUSTOM PAINTERS ==================
-
-class GridPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = const Color(0xFF1E293B)
-      ..strokeWidth = 1.0;
-
-    for (double i = 0; i < size.width; i += 40) {
-      canvas.drawLine(Offset(i, 0), Offset(i, size.height), paint);
-    }
-    for (double i = 0; i < size.height; i += 40) {
-      canvas.drawLine(Offset(0, i), Offset(size.width, i), paint);
-    }
-  }
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
-}
-
-class IndonesiaWeatherMapPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final w = size.width;
-    final h = size.height;
-
-    // ==========================================
-    // PETA INDONESIA (DIPERBESAR & DIPUSATKAN)
-    // ==========================================
-    
-    // 1. Kab. Bulungan (Utara) - MERAH
-    final kalimantanUtara = Path()
-      ..moveTo(w * 0.35, h * 0.15)
-      ..lineTo(w * 0.45, h * 0.12)
-      ..lineTo(w * 0.48, h * 0.20)
-      ..lineTo(w * 0.40, h * 0.23)
-      ..lineTo(w * 0.33, h * 0.20)
-      ..close();
-    canvas.drawPath(kalimantanUtara, Paint()..color = const Color(0xFFEF4444).withOpacity(0.8));
-    
-    // 2. Kab. Kotawaringin (Tengah) - KUNING
-    final kalimantanTengah = Path()
-      ..moveTo(w * 0.38, h * 0.23)
-      ..lineTo(w * 0.48, h * 0.20)
-      ..lineTo(w * 0.52, h * 0.30)
-      ..lineTo(w * 0.45, h * 0.35)
-      ..lineTo(w * 0.35, h * 0.33)
-      ..close();
-    canvas.drawPath(kalimantanTengah, Paint()..color = const Color(0xFFF59E0B).withOpacity(0.8));
-
-    // 3. Kalimantan Selatan/Timur (Sisa) - HIJAU
-    final kalimantanSisa = Path()
-      ..moveTo(w * 0.35, h * 0.33)
-      ..lineTo(w * 0.45, h * 0.35)
-      ..lineTo(w * 0.52, h * 0.30)
-      ..lineTo(w * 0.54, h * 0.40)
-      ..lineTo(w * 0.40, h * 0.45)
-      ..lineTo(w * 0.30, h * 0.40)
-      ..close();
-    canvas.drawPath(kalimantanSisa, Paint()..color = const Color(0xFF10B981).withOpacity(0.8));
-
-    // 4. Jawa Barat (Hijau)
-    final jabar = Path()
-      ..moveTo(w * 0.25, h * 0.55)
-      ..lineTo(w * 0.30, h * 0.52)
-      ..lineTo(w * 0.33, h * 0.56)
-      ..lineTo(w * 0.28, h * 0.58)
-      ..close();
-    canvas.drawPath(jabar, Paint()..color = const Color(0xFF10B981).withOpacity(0.8));
-
-    // 5. Jawa Tengah (Kuning)
-    final jateng = Path()
-      ..moveTo(w * 0.30, h * 0.52)
-      ..lineTo(w * 0.38, h * 0.53)
-      ..lineTo(w * 0.40, h * 0.57)
-      ..lineTo(w * 0.33, h * 0.56)
-      ..close();
-    canvas.drawPath(jateng, Paint()..color = const Color(0xFFF59E0B).withOpacity(0.8));
-
-    // 6. Jawa Timur / Surabaya (Hijau)
-    final jatim = Path()
-      ..moveTo(w * 0.38, h * 0.53)
-      ..lineTo(w * 0.50, h * 0.55)
-      ..lineTo(w * 0.49, h * 0.59)
-      ..lineTo(w * 0.40, h * 0.57)
-      ..close();
-    canvas.drawPath(jatim, Paint()..color = const Color(0xFF10B981).withOpacity(0.8));
-
-    // 7. Bali (Hijau)
-    final bali = Path()
-      ..moveTo(w * 0.51, h * 0.59)
-      ..lineTo(w * 0.55, h * 0.60)
-      ..lineTo(w * 0.55, h * 0.62)
-      ..lineTo(w * 0.51, h * 0.61)
-      ..close();
-    canvas.drawPath(bali, Paint()..color = const Color(0xFF10B981).withOpacity(0.8));
-
-    // ==========================================
-    // SILUET PULAU LAIN (Hanya Garis Tepi)
-    // ==========================================
-    final strokePaint = Paint()
-      ..color = const Color(0xFF475569)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.5;
-
-    // Sumatera
-    final sumatera = Path()
-      ..moveTo(w * 0.10, h * 0.20)
-      ..lineTo(w * 0.18, h * 0.25)
-      ..lineTo(w * 0.22, h * 0.40)
-      ..lineTo(w * 0.15, h * 0.50)
-      ..lineTo(w * 0.08, h * 0.45)
-      ..lineTo(w * 0.05, h * 0.30)
-      ..close();
-    canvas.drawPath(sumatera, strokePaint);
-
-    // Sulawesi
-    final sulawesi = Path()
-      ..moveTo(w * 0.55, h * 0.20)
-      ..lineTo(w * 0.62, h * 0.18)
-      ..lineTo(w * 0.68, h * 0.28)
-      ..lineTo(w * 0.62, h * 0.38)
-      ..lineTo(w * 0.55, h * 0.35)
-      ..lineTo(w * 0.58, h * 0.25)
-      ..close();
-    canvas.drawPath(sulawesi, strokePaint);
-
-    // Papua
-    final papua = Path()
-      ..moveTo(w * 0.80, h * 0.25)
-      ..lineTo(w * 0.90, h * 0.22)
-      ..lineTo(w * 0.95, h * 0.35)
-      ..lineTo(w * 0.88, h * 0.45)
-      ..lineTo(w * 0.75, h * 0.40)
-      ..lineTo(w * 0.73, h * 0.30)
-      ..close();
-    canvas.drawPath(papua, strokePaint);
-
-    // ==========================================
-    // LABEL TEKS
-    // ==========================================
-    void drawText(String text, Offset offset, Color color, {double fontSize = 10}) {
-      final textSpan = TextSpan(
-        text: text,
-        style: TextStyle(color: color, fontSize: fontSize, fontWeight: FontWeight.bold),
-      );
-      final textPainter = TextPainter(
-        text: textSpan,
-        textDirection: TextDirection.ltr,
-      )..layout();
-      textPainter.paint(canvas, offset);
-    }
-
-    drawText('Bulungan', Offset(w * 0.35, h * 0.16), Colors.white);
-    drawText('Kotawaringin', Offset(w * 0.39, h * 0.27), Colors.white);
-    drawText('Jatim', Offset(w * 0.42, h * 0.55), Colors.white, fontSize: 8);
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
 // ================== 3. UI LAYAR CHAT ==================
