@@ -6,7 +6,7 @@ import 'package:http/http.dart' as http;
 
 // ==========================================
 // WEATHERFIT - MAIN APPLICATION (SINGLE FILE)
-// Fully Integrated: Dashboard, AiHelper, Chat, & Warning Map
+// Fully Integrated: Dashboard, AiHelper, Chat, & Pro Warning Map
 // Optimized for MediaTek Helio G99 (60 FPS, No heavy blur)
 // ==========================================
 
@@ -584,7 +584,7 @@ class _WeatherScreenState extends State<WeatherScreen> {
   String? _error;
   String _selectedModel = 'best_match';
   
-  String _displayCityName = 'Bulungan, Kalimantan Utara';
+  String _displayCityName = 'Kec. Bulungan, Kalimantan Utara';
   double _latitude = 2.85;
   double _longitude = 117.35;
 
@@ -630,6 +630,24 @@ class _WeatherScreenState extends State<WeatherScreen> {
         description: 'Cuaca cerah berawan, angin sepoi-sepoi.',
         startTime: now.subtract(const Duration(hours: 5)),
         endTime: now.add(const Duration(hours: 5)),
+      ),
+      WeatherWarning(
+        regionId: 'jatim_01',
+        regionName: 'Kec. Gubeng, Surabaya, Jawa Timur',
+        levelName: 'Waspada Badai',
+        level: WarningLevel.warning,
+        description: 'Potensi hujan lebat disertai angin kencang.',
+        startTime: now.subtract(const Duration(hours: 1)),
+        endTime: now.add(const Duration(hours: 4)),
+      ),
+      WeatherWarning(
+        regionId: 'jakarta_01',
+        regionName: 'Kec. Menteng, Jakarta Pusat',
+        levelName: 'Aman Normal',
+        level: WarningLevel.safe,
+        description: 'Cerah berawan sepanjang siang hari.',
+        startTime: now.subtract(const Duration(hours: 3)),
+        endTime: now.add(const Duration(hours: 3)),
       ),
     ];
   }
@@ -1204,7 +1222,7 @@ class _WeatherScreenState extends State<WeatherScreen> {
   }
 }
 
-// ================== WEATHER MAP INTERACTIVE PAGE ==================
+// ================== WEATHER MAP INTERACTIVE PAGE (PRO VERSION) ==================
 class WeatherMapPage extends StatefulWidget {
   final List<WeatherWarning> warnings;
 
@@ -1216,13 +1234,14 @@ class WeatherMapPage extends StatefulWidget {
 
 class _WeatherMapPageState extends State<WeatherMapPage> {
   String _searchQuery = "";
-  double _zoomScale = 1.0;
+  double _zoomScale = 1.2;
 
   @override
   Widget build(BuildContext context) {
     final filteredWarnings = widget.warnings.where((w) {
       return w.regionName.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-          w.levelName.toLowerCase().contains(_searchQuery.toLowerCase());
+          w.levelName.toLowerCase().contains(_searchQuery.toLowerCase()) ||
+          w.description.toLowerCase().contains(_searchQuery.toLowerCase());
     }).toList();
 
     return Scaffold(
@@ -1231,12 +1250,59 @@ class _WeatherMapPageState extends State<WeatherMapPage> {
         backgroundColor: const Color(0xFF1E293B),
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.white),
-        title: const Text('Peta Peringatan Asia Pasifik', style: TextStyle(fontSize: 16, color: Colors.white)),
+        title: const Text('Peta Peringatan Dini Asia Pasifik', style: TextStyle(fontSize: 16, color: Colors.white, fontWeight: FontWeight.bold)),
       ),
       body: Column(
         children: [
+          // ==========================================
+          // BANNER WAKTU BERLAKU (ALA BMKG PROFESSIONAL)
+          // ==========================================
+          Container(
+            width: double.infinity,
+            margin: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0xFF1E293B), Color(0xFF334155)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: const Color(0xFF38BDF8).withOpacity(0.3)),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.access_time_filled, color: Color(0xFF38BDF8), size: 20),
+                    const SizedBox(width: 8),
+                    const Text(
+                      'Masa Berlaku Peringatan:',
+                      style: TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w500),
+                    ),
+                  ],
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF38BDF8).withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Text(
+                    '14:30 - 18:00 WITA',
+                    style: TextStyle(color: Color(0xFF38BDF8), fontSize: 12, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // ==========================================
+          // INTERACTIVE MAP CONTAINER (PRO REGIONAL BLOCKS)
+          // ==========================================
           Expanded(
-            flex: 5,
+            flex: 6,
             child: Container(
               margin: const EdgeInsets.all(12),
               decoration: BoxDecoration(
@@ -1257,7 +1323,7 @@ class _WeatherMapPageState extends State<WeatherMapPage> {
                     child: Center(
                       child: CustomPaint(
                         size: const Size(double.infinity, double.infinity),
-                        painter: AsiaPacificMapPainter(warnings: widget.warnings, zoom: _zoomScale),
+                        painter: AsiaPacificProMapPainter(warnings: widget.warnings, zoom: _zoomScale),
                       ),
                     ),
                   ),
@@ -1265,13 +1331,14 @@ class _WeatherMapPageState extends State<WeatherMapPage> {
                     top: 16,
                     left: 16,
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                       decoration: BoxDecoration(
-                        color: Colors.black54,
-                        borderRadius: BorderRadius.circular(12),
+                        color: Colors.black87,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: Colors.white24),
                       ),
                       child: Text(
-                        'Zoom: ${_zoomScale.toStringAsFixed(1)}x (${_zoomScale > 2.0 ? "Level Kecamatan" : "Level Provinsi"})',
+                        'Zoom: ${_zoomScale.toStringAsFixed(1)}x (${_zoomScale > 2.0 ? "Detail Level Kecamatan" : "Level Provinsi/Region"})',
                         style: const TextStyle(color: Colors.white70, fontSize: 11),
                       ),
                     ),
@@ -1282,7 +1349,7 @@ class _WeatherMapPageState extends State<WeatherMapPage> {
                     child: Container(
                       padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF1E293B).withOpacity(0.9),
+                        color: const Color(0xFF1E293B).withOpacity(0.95),
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(color: const Color(0xFF334155)),
                       ),
@@ -1290,11 +1357,11 @@ class _WeatherMapPageState extends State<WeatherMapPage> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         mainAxisSize: MainAxisSize.min,
                         children: const [
-                          _LegendItem(color: Colors.greenAccent, label: 'Hijau (Aman)'),
+                          _LegendItem(color: Colors.greenAccent, label: 'Hijau (Aman / Normal)'),
                           SizedBox(height: 4),
-                          _LegendItem(color: Colors.amberAccent, label: 'Kuning (Waspada)'),
+                          _LegendItem(color: Colors.amberAccent, label: 'Kuning (Waspada Badai)'),
                           SizedBox(height: 4),
-                          _LegendItem(color: Colors.redAccent, label: 'Merah (Bahaya)'),
+                          _LegendItem(color: Colors.redAccent, label: 'Merah (Bahaya / Siaga)'),
                         ],
                       ),
                     ),
@@ -1303,6 +1370,10 @@ class _WeatherMapPageState extends State<WeatherMapPage> {
               ),
             ),
           ),
+
+          // ==========================================
+          // SEARCH & REGIONAL WARNING CARDS LIST
+          // ==========================================
           Expanded(
             flex: 4,
             child: Container(
@@ -1354,7 +1425,7 @@ class _WeatherMapPageState extends State<WeatherMapPage> {
                             children: [
                               Container(
                                 width: 4,
-                                height: 40,
+                                height: 42,
                                 decoration: BoxDecoration(
                                   color: color,
                                   borderRadius: BorderRadius.circular(2),
@@ -1363,25 +1434,25 @@ class _WeatherMapPageState extends State<WeatherMapPage> {
                               const SizedBox(width: 12),
                               Expanded(
                                 child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      warning.regionName,
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 14,
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        warning.regionName,
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 14,
+                                        ),
                                       ),
-                                    ),
-                                    const SizedBox(height: 2),
-                                    Text(
-                                      warning.description,
-                                      style: const TextStyle(
-                                        color: Colors.white70,
-                                        fontSize: 12,
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        warning.description,
+                                        style: const TextStyle(
+                                          color: Colors.white70,
+                                          fontSize: 12,
+                                        ),
                                       ),
-                                    ),
-                                  ],
+                                    ],
                                 ),
                               ),
                               Container(
@@ -1434,49 +1505,115 @@ class _LegendItem extends StatelessWidget {
   }
 }
 
-class AsiaPacificMapPainter extends CustomPainter {
+// ================== PRO ASIA PACIFIC MAP PAINTER ==================
+class AsiaPacificProMapPainter extends CustomPainter {
   final List<WeatherWarning> warnings;
   final double zoom;
 
-  AsiaPacificMapPainter({required this.warnings, required this.zoom});
+  AsiaPacificProMapPainter({required this.warnings, required this.zoom});
 
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()..style = PaintingStyle.fill;
 
-    paint.color = const Color(0xFF1E293B);
+    // Ocean Background Canvas
+    paint.color = const Color(0xFF0F172A);
     canvas.drawRect(Rect.fromLTWH(0, 0, size.width, size.height), paint);
 
-    paint.color = Colors.redAccent.withOpacity(0.4);
+    // Draw subtle grid lines for radar effect
+    final gridPaint = Paint()
+      ..color = Colors.white12
+      ..strokeWidth = 0.5;
+    for (double i = 0; i < size.width; i += 40 * zoom) {
+      canvas.drawLine(Offset(i, 0), Offset(i, size.height), gridPaint);
+    }
+    for (double j = 0; j < size.height; j += 40 * zoom) {
+      canvas.drawLine(Offset(0, j), Offset(size.width, j), gridPaint);
+    }
+
+    // Regional Blocks representing Asia-Pacific / Indonesia Islands with full polygon/region fill
+    // 1. Kalimantan (Danger/Red)
+    paint.color = Colors.redAccent.withOpacity(0.5);
     canvas.drawRRect(
       RRect.fromRectAndRadius(
-        Rect.fromLTWH(size.width * 0.35, size.height * 0.4, size.width * 0.2 * zoom, size.height * 0.25 * zoom),
+        Rect.fromLTWH(size.width * 0.25, size.height * 0.35, size.width * 0.22 * zoom, size.height * 0.25 * zoom),
+        const Radius.circular(12),
+      ),
+      paint,
+    );
+
+    // 2. Sulawesi / Gorontalo (Warning/Yellow)
+    paint.color = Colors.amberAccent.withOpacity(0.5);
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromLTWH(size.width * 0.52, size.height * 0.4, size.width * 0.16 * zoom, size.height * 0.22 * zoom),
+        const Radius.circular(12),
+      ),
+      paint,
+    );
+
+    // 3. Jawa & Bali (Warning & Safe Mix)
+    paint.color = Colors.amberAccent.withOpacity(0.5);
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromLTWH(size.width * 0.28, size.height * 0.68, size.width * 0.25 * zoom, size.height * 0.12 * zoom),
+        const Radius.circular(10),
+      ),
+      paint,
+    );
+
+    paint.color = Colors.greenAccent.withOpacity(0.5);
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromLTWH(size.width * 0.56, size.height * 0.7, size.width * 0.12 * zoom, size.height * 0.1 * zoom),
         const Radius.circular(8),
       ),
       paint,
     );
 
-    paint.color = Colors.amberAccent.withOpacity(0.4);
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        Rect.fromLTWH(size.width * 0.6, size.height * 0.45, size.width * 0.15 * zoom, size.height * 0.2 * zoom),
-        const Radius.circular(8),
-      ),
-      paint,
-    );
-
+    // 4. Sumatera Region (Safe/Green)
     paint.color = Colors.greenAccent.withOpacity(0.4);
     canvas.drawRRect(
       RRect.fromRectAndRadius(
-        Rect.fromLTWH(size.width * 0.45, size.height * 0.7, size.width * 0.12 * zoom, size.height * 0.15 * zoom),
-        const Radius.circular(8),
+        Rect.fromLTWH(size.width * 0.08, size.height * 0.3, size.width * 0.14 * zoom, size.height * 0.35 * zoom),
+        const Radius.circular(12),
       ),
       paint,
     );
+
+    // 5. Papua & Eastern Region (Safe/Green)
+    paint.color = Colors.greenAccent.withOpacity(0.4);
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromLTWH(size.width * 0.74, size.height * 0.45, size.width * 0.2 * zoom, size.height * 0.25 * zoom),
+        const Radius.circular(12),
+      ),
+      paint,
+    );
+
+    // Draw Region Labels for Professional Look
+    final textPainter = TextPainter(
+      textDirection: TextDirection.ltr,
+      textAlign: TextAlign.center,
+    );
+
+    void drawLabel(String text, Offset offset, Color color) {
+      textPainter.text = TextSpan(
+        text: text,
+        style: TextStyle(color: color, fontSize: 11 * (zoom > 1.5 ? 1.2 : 1.0), fontWeight: FontWeight.bold),
+      );
+      textPainter.layout();
+      textPainter.paint(canvas, offset);
+    }
+
+    drawLabel("Kalimantan\n(Siaga Red)", Offset(size.width * 0.28, size.height * 0.45), Colors.white);
+    drawLabel("Sulawesi\n(Waspada)", Offset(size.width * 0.54, size.height * 0.48), Colors.white);
+    drawLabel("Jawa Timur\n(Waspada)", Offset(size.width * 0.35, size.height * 0.71), Colors.white);
+    drawLabel("Bali\n(Aman)", Offset(size.width * 0.59, size.height * 0.73), Colors.white);
   }
 
   @override
-  bool shouldRepaint(covariant AsiaPacificMapPainter oldDelegate) {
+  bool shouldRepaint(covariant AsiaPacificProMapPainter oldDelegate) {
     return oldDelegate.zoom != zoom || oldDelegate.warnings != warnings;
   }
 }
@@ -1636,7 +1773,6 @@ class _ChatScreenState extends State<ChatScreen> {
                     child: Text(
                       msg.text,
                       style: TextStyle(
-                        // PERBAIKAN: Mengubah Colors.white90 menjadi Colors.white70 agar valid di Flutter
                         color: msg.isUser ? const Color(0xFF0F172A) : Colors.white70,
                         fontSize: 14,
                         height: 1.4,
