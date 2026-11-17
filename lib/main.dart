@@ -92,6 +92,21 @@ class AiResult {
   AiResult({required this.text, required this.fallback});
 }
 
+// Model untuk peringatan BMKG
+class BmkgWarning {
+  final String title;
+  final String description;
+  final String severity; // "Merah", "Kuning", "Hijau"
+  final String pubDate;
+
+  BmkgWarning({
+    required this.title,
+    required this.description,
+    required this.severity,
+    required this.pubDate,
+  });
+}
+
 // ================== 1. AI HELPER ==================
 class AiHelper {
   static String get _apiKey {
@@ -208,6 +223,7 @@ Jawab pertanyaan user: "$userQuestion" dengan bahasa santai, ramah, dan SANGAT S
 class WeatherService {
   static const String _baseUrl = 'https://api.open-meteo.com/v1/forecast';
   static const String _geoUrl = 'https://geocoding-api.open-meteo.com/v1/search';
+  static const String _bmkgAlertUrl = 'https://www.bmkg.go.id/alerts/nowcast/id';
 
   Future<List<DailyForecast>> fetchWeather({
     required double latitude,
@@ -388,6 +404,54 @@ ${results[2]}
       }
     } catch (_) {}
     return [];
+  }
+
+  // Fungsi untuk mengambil peringatan dini BMKG (XML Parsing Manual)
+  Future<List<BmkgWarning>> fetchBmkgAlerts() async {
+    try {
+      final response = await http.get(Uri.parse(_bmkgAlertUrl)).timeout(const Duration(seconds: 15));
+      if (response.statusCode != 200) return [];
+
+      final xmlString = response.body;
+      // Parsing XML manual sederhana untuk mengambil item <item>
+      final itemRegex = RegExp(r'<item>(.*?)</item>', dotAll: true);
+      final matches = itemRegex.allMatches(xmlString);
+
+      List<BmkgWarning> warnings = [];
+      for (var match in matches) {
+        final itemContent = match.group(1) ?? '';
+        
+        // Ekstrak Title
+        final titleMatch = RegExp(r'<title>(.*?)</title>', dotAll: true).firstMatch(itemContent);
+        final title = titleMatch?.group(1)?.replaceAll(RegExp(r'<!\[CDATA\[|\]\]>'), '').trim() ?? 'Peringatan Cuaca';
+        
+        // Ekstrak Description
+        final descMatch = RegExp(r'<description>(.*?)</description>', dotAll: true).firstMatch(itemContent);
+        final desc = descMatch?.group(1)?.replaceAll(RegExp(r'<!\[CDATA\[|\]\]>'), '').trim() ?? 'Wilayah terdampak.';
+        
+        // Ekstrak PubDate
+        final dateMatch = RegExp(r'<pubDate>(.*?)</pubDate>', dotAll: true).firstMatch(itemContent);
+        final pubDate = dateMatch?.group(1)?.trim() ?? '';
+
+        // Tentukan Severity berdasarkan kata kunci di deskripsi (simulasi karena RSS tidak menyediakan tag severity langsung)
+        String severity = 'Hijau';
+        if (desc.toLowerCase().contains('lebat') || desc.toLowerCase().contains('petir') || desc.toLowerCase().contains('angin kencang')) {
+          severity = 'Merah';
+        } else if (desc.toLowerCase().contains('sedang') || desc.toLowerCase().contains('ringan')) {
+          severity = 'Kuning';
+        }
+
+        warnings.add(BmkgWarning(
+          title: title,
+          description: desc,
+          severity: severity,
+          pubDate: pubDate,
+        ));
+      }
+      return warnings;
+    } catch (e) {
+      return [];
+    }
   }
 }
 
@@ -1027,7 +1091,7 @@ class _WeatherScreenState extends State<WeatherScreen> {
   }
 }
 
-// ================== 2. PETA PERINGATAN DINI ASIA PASIFIK ==================
+// ================== 2. PETA PERINGATAN INDONESIA (BMKG LIVE + SIMULASI VISUAL) ==================
 class AsiaPacificMapScreen extends StatefulWidget {
   const AsiaPacificMapScreen({super.key});
 
@@ -1037,6 +1101,25 @@ class AsiaPacificMapScreen extends StatefulWidget {
 
 class _AsiaPacificMapScreenState extends State<AsiaPacificMapScreen> {
   final TransformationController _transformationController = TransformationController();
+  final WeatherService _service = WeatherService();
+  List<BmkgWarning> _warnings = [];
+  bool _isLoadingWarnings = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadBmkgWarnings();
+  }
+
+  Future<void> _loadBmkgWarnings() async {
+    final warnings = await _service.fetchBmkgAlerts();
+    if (mounted) {
+      setState(() {
+        _warnings = warnings;
+        _isLoadingWarnings = false;
+      });
+    }
+  }
 
   @override
   void dispose() {
@@ -1047,12 +1130,12 @@ class _AsiaPacificMapScreenState extends State<AsiaPacificMapScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0F172A), // Dark navy background
+      backgroundColor: const Color(0xFF0F172A),
       appBar: AppBar(
         backgroundColor: const Color(0xFF1E293B),
         iconTheme: const IconThemeData(color: Colors.white),
         title: const Text(
-          'Peta Peringatan Dini Asia Pasifik',
+          'Peta Peringatan Indonesia',
           style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
         ),
       ),
@@ -1084,7 +1167,7 @@ class _AsiaPacificMapScreenState extends State<AsiaPacificMapScreen> {
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: const Text(
-                    '14:30 - 18:00 WITA',
+                    '14:30 - 18:00 WIB', // Diubah ke WIB karena fokus Indonesia
                     style: TextStyle(color: Color(0xFF60A5FA), fontSize: 13, fontWeight: FontWeight.bold),
                   ),
                 ),
@@ -1092,7 +1175,7 @@ class _AsiaPacificMapScreenState extends State<AsiaPacificMapScreen> {
             ),
           ),
           
-          // Peta Interaktif
+          // Peta Interaktif (Simulasi Visual)
           Expanded(
             flex: 3,
             child: Container(
@@ -1110,17 +1193,14 @@ class _AsiaPacificMapScreenState extends State<AsiaPacificMapScreen> {
                 boundaryMargin: const EdgeInsets.all(100),
                 child: Stack(
                   children: [
-                    // Background Grid
                     Positioned.fill(
                       child: CustomPaint(painter: GridPainter()),
                     ),
-                    // Peta
                     Positioned.fill(
                       child: CustomPaint(
-                        painter: AsiaPacificWeatherMapPainter(),
+                        painter: IndonesiaWeatherMapPainter(),
                       ),
                     ),
-                    // Zoom Label
                     Positioned(
                       top: 12,
                       left: 12,
@@ -1160,39 +1240,30 @@ class _AsiaPacificMapScreenState extends State<AsiaPacificMapScreen> {
             ),
           ),
 
-          // Daftar Peringatan (Simulasi Detail Kabupaten)
+          // Daftar Peringatan (Live dari BMKG)
           Expanded(
             flex: 2,
-            child: ListView(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              children: [
-                _buildWarningCard(
-                  title: 'Kab. Bulungan, Kalimantan Utara',
-                  description: 'Potensi hujan sedang-lebat disertai kilat/petir intensif.',
-                  color: const Color(0xFFEF4444),
-                ),
-                _buildWarningCard(
-                  title: 'Kab. Kotawaringin Timur, Kalteng',
-                  description: 'Hujan intensitas ringan hingga sedang durasi sore hari.',
-                  color: const Color(0xFFF59E0B),
-                ),
-                _buildWarningCard(
-                  title: 'Kota Surabaya, Jawa Timur',
-                  description: 'Cuaca cerah berawan, angin semilir.',
-                  color: const Color(0xFF10B981),
-                ),
-                _buildWarningCard(
-                  title: 'Kota Denpasar, Bali',
-                  description: 'Potensi hujan ringan pada malam hari.',
-                  color: const Color(0xFF10B981),
-                ),
-                _buildWarningCard(
-                  title: 'Kota Darwin, Australia',
-                  description: 'Peringatan Gelombang Panas (Heatwave).',
-                  color: const Color(0xFFF59E0B),
-                ),
-              ],
-            ),
+            child: _isLoadingWarnings
+                ? const Center(child: CircularProgressIndicator(color: Color(0xFF60A5FA)))
+                : _warnings.isEmpty
+                    ? const Center(child: Text('Tidak ada peringatan dini aktif.', style: TextStyle(color: Colors.white70)))
+                    : ListView.builder(
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        itemCount: _warnings.length,
+                        itemBuilder: (context, index) {
+                          final warning = _warnings[index];
+                          final color = warning.severity == 'Merah'
+                              ? const Color(0xFFEF4444)
+                              : warning.severity == 'Kuning'
+                                  ? const Color(0xFFF59E0B)
+                                  : const Color(0xFF10B981);
+                          return _buildWarningCard(
+                            title: warning.title,
+                            description: warning.description,
+                            color: color,
+                          );
+                        },
+                      ),
           ),
         ],
       ),
@@ -1232,6 +1303,8 @@ class _AsiaPacificMapScreenState extends State<AsiaPacificMapScreen> {
                 child: Text(
                   title,
                   style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
               Container(
@@ -1251,6 +1324,8 @@ class _AsiaPacificMapScreenState extends State<AsiaPacificMapScreen> {
           Text(
             description,
             style: const TextStyle(color: Colors.white60, fontSize: 12),
+            maxLines: 3,
+            overflow: TextOverflow.ellipsis,
           ),
         ],
       ),
@@ -1260,7 +1335,6 @@ class _AsiaPacificMapScreenState extends State<AsiaPacificMapScreen> {
 
 // ================== CUSTOM PAINTERS ==================
 
-// Grid Background
 class GridPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
@@ -1268,180 +1342,137 @@ class GridPainter extends CustomPainter {
       ..color = const Color(0xFF1E293B)
       ..strokeWidth = 1.0;
 
-    // Garis Vertikal
     for (double i = 0; i < size.width; i += 40) {
       canvas.drawLine(Offset(i, 0), Offset(i, size.height), paint);
     }
-
-    // Garis Horizontal
     for (double i = 0; i < size.height; i += 40) {
       canvas.drawLine(Offset(0, i), Offset(size.width, i), paint);
     }
   }
-
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
-// Peta Asia Pasifik dengan Simulasi Kabupaten
-class AsiaPacificWeatherMapPainter extends CustomPainter {
+class IndonesiaWeatherMapPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final w = size.width;
     final h = size.height;
 
     // ==========================================
-    // 1. PENGGAMBARAN PULAU BESAR (Siluet Kasar)
+    // PETA INDONESIA (DIPERBESAR & DIPUSATKAN)
     // ==========================================
     
-    // Fungsi helper untuk menggambar pulau
-    void drawIsland(List<Offset> points, Color color, {bool strokeOnly = false}) {
-      final path = Path();
-      if (points.isEmpty) return;
-      path.moveTo(points[0].dx, points[0].dy);
-      for (int i = 1; i < points.length; i++) {
-        path.lineTo(points[i].dx, points[i].dy);
-      }
-      path.close();
+    // 1. Kab. Bulungan (Utara) - MERAH
+    final kalimantanUtara = Path()
+      ..moveTo(w * 0.35, h * 0.15)
+      ..lineTo(w * 0.45, h * 0.12)
+      ..lineTo(w * 0.48, h * 0.20)
+      ..lineTo(w * 0.40, h * 0.23)
+      ..lineTo(w * 0.33, h * 0.20)
+      ..close();
+    canvas.drawPath(kalimantanUtara, Paint()..color = const Color(0xFFEF4444).withOpacity(0.8));
+    
+    // 2. Kab. Kotawaringin (Tengah) - KUNING
+    final kalimantanTengah = Path()
+      ..moveTo(w * 0.38, h * 0.23)
+      ..lineTo(w * 0.48, h * 0.20)
+      ..lineTo(w * 0.52, h * 0.30)
+      ..lineTo(w * 0.45, h * 0.35)
+      ..lineTo(w * 0.35, h * 0.33)
+      ..close();
+    canvas.drawPath(kalimantanTengah, Paint()..color = const Color(0xFFF59E0B).withOpacity(0.8));
 
-      final paint = Paint()
-        ..color = color
-        ..style = strokeOnly ? PaintingStyle.stroke : PaintingStyle.fill;
+    // 3. Kalimantan Selatan/Timur (Sisa) - HIJAU
+    final kalimantanSisa = Path()
+      ..moveTo(w * 0.35, h * 0.33)
+      ..lineTo(w * 0.45, h * 0.35)
+      ..lineTo(w * 0.52, h * 0.30)
+      ..lineTo(w * 0.54, h * 0.40)
+      ..lineTo(w * 0.40, h * 0.45)
+      ..lineTo(w * 0.30, h * 0.40)
+      ..close();
+    canvas.drawPath(kalimantanSisa, Paint()..color = const Color(0xFF10B981).withOpacity(0.8));
 
-      if (strokeOnly) {
-        paint.strokeWidth = 1.5;
-        paint.color = const Color(0xFF475569);
-      }
+    // 4. Jawa Barat (Hijau)
+    final jabar = Path()
+      ..moveTo(w * 0.25, h * 0.55)
+      ..lineTo(w * 0.30, h * 0.52)
+      ..lineTo(w * 0.33, h * 0.56)
+      ..lineTo(w * 0.28, h * 0.58)
+      ..close();
+    canvas.drawPath(jabar, Paint()..color = const Color(0xFF10B981).withOpacity(0.8));
 
-      canvas.drawPath(path, paint);
-    }
+    // 5. Jawa Tengah (Kuning)
+    final jateng = Path()
+      ..moveTo(w * 0.30, h * 0.52)
+      ..lineTo(w * 0.38, h * 0.53)
+      ..lineTo(w * 0.40, h * 0.57)
+      ..lineTo(w * 0.33, h * 0.56)
+      ..close();
+    canvas.drawPath(jateng, Paint()..color = const Color(0xFFF59E0B).withOpacity(0.8));
 
-    // --- INDONESIA (Kepulauan) ---
+    // 6. Jawa Timur / Surabaya (Hijau)
+    final jatim = Path()
+      ..moveTo(w * 0.38, h * 0.53)
+      ..lineTo(w * 0.50, h * 0.55)
+      ..lineTo(w * 0.49, h * 0.59)
+      ..lineTo(w * 0.40, h * 0.57)
+      ..close();
+    canvas.drawPath(jatim, Paint()..color = const Color(0xFF10B981).withOpacity(0.8));
+
+    // 7. Bali (Hijau)
+    final bali = Path()
+      ..moveTo(w * 0.51, h * 0.59)
+      ..lineTo(w * 0.55, h * 0.60)
+      ..lineTo(w * 0.55, h * 0.62)
+      ..lineTo(w * 0.51, h * 0.61)
+      ..close();
+    canvas.drawPath(bali, Paint()..color = const Color(0xFF10B981).withOpacity(0.8));
+
+    // ==========================================
+    // SILUET PULAU LAIN (Hanya Garis Tepi)
+    // ==========================================
+    final strokePaint = Paint()
+      ..color = const Color(0xFF475569)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5;
+
     // Sumatera
-    final sumatera = [
-      Offset(w * 0.15, h * 0.25),
-      Offset(w * 0.22, h * 0.30),
-      Offset(w * 0.25, h * 0.45),
-      Offset(w * 0.20, h * 0.55),
-      Offset(w * 0.12, h * 0.50),
-      Offset(w * 0.10, h * 0.35),
-    ];
-    drawIsland(sumatera, const Color(0xFF10B981).withOpacity(0.6), strokeOnly: true);
-
-    // Jawa
-    final jawa = [
-      Offset(w * 0.25, h * 0.62),
-      Offset(w * 0.35, h * 0.64),
-      Offset(w * 0.45, h * 0.66),
-      Offset(w * 0.48, h * 0.64),
-      Offset(w * 0.40, h * 0.62),
-      Offset(w * 0.30, h * 0.60),
-    ];
-    drawIsland(jawa, const Color(0xFF10B981).withOpacity(0.6), strokeOnly: true);
-
-    // Kalimantan
-    final kalimantan = [
-      Offset(w * 0.30, h * 0.30),
-      Offset(w * 0.45, h * 0.28),
-      Offset(w * 0.50, h * 0.38),
-      Offset(w * 0.48, h * 0.50),
-      Offset(w * 0.35, h * 0.52),
-      Offset(w * 0.28, h * 0.45),
-    ];
-    drawIsland(kalimantan, const Color(0xFF10B981).withOpacity(0.6), strokeOnly: true);
+    final sumatera = Path()
+      ..moveTo(w * 0.10, h * 0.20)
+      ..lineTo(w * 0.18, h * 0.25)
+      ..lineTo(w * 0.22, h * 0.40)
+      ..lineTo(w * 0.15, h * 0.50)
+      ..lineTo(w * 0.08, h * 0.45)
+      ..lineTo(w * 0.05, h * 0.30)
+      ..close();
+    canvas.drawPath(sumatera, strokePaint);
 
     // Sulawesi
-    final sulawesi = [
-      Offset(w * 0.52, h * 0.30),
-      Offset(w * 0.58, h * 0.28),
-      Offset(w * 0.62, h * 0.35),
-      Offset(w * 0.58, h * 0.45),
-      Offset(w * 0.50, h * 0.42),
-      Offset(w * 0.55, h * 0.35),
-    ];
-    drawIsland(sulawesi, const Color(0xFF10B981).withOpacity(0.6), strokeOnly: true);
+    final sulawesi = Path()
+      ..moveTo(w * 0.55, h * 0.20)
+      ..lineTo(w * 0.62, h * 0.18)
+      ..lineTo(w * 0.68, h * 0.28)
+      ..lineTo(w * 0.62, h * 0.38)
+      ..lineTo(w * 0.55, h * 0.35)
+      ..lineTo(w * 0.58, h * 0.25)
+      ..close();
+    canvas.drawPath(sulawesi, strokePaint);
 
     // Papua
-    final papua = [
-      Offset(w * 0.75, h * 0.35),
-      Offset(w * 0.85, h * 0.32),
-      Offset(w * 0.90, h * 0.45),
-      Offset(w * 0.82, h * 0.55),
-      Offset(w * 0.72, h * 0.50),
-      Offset(w * 0.70, h * 0.40),
-    ];
-    drawIsland(papua, const Color(0xFF10B981).withOpacity(0.6), strokeOnly: true);
-
-    // Filipina (Utara Kalimantan)
-    final filipina = [
-      Offset(w * 0.45, h * 0.10),
-      Offset(w * 0.50, h * 0.12),
-      Offset(w * 0.48, h * 0.22),
-      Offset(w * 0.42, h * 0.18),
-    ];
-    drawIsland(filipina, const Color(0xFF10B981).withOpacity(0.6), strokeOnly: true);
-
-    // Australia (Darwin Area)
-    final australia = [
-      Offset(w * 0.50, h * 0.75),
-      Offset(w * 0.70, h * 0.70),
-      Offset(w * 0.80, h * 0.85),
-      Offset(w * 0.60, h * 0.95),
-      Offset(w * 0.45, h * 0.90),
-    ];
-    drawIsland(australia, const Color(0xFF10B981).withOpacity(0.6), strokeOnly: true);
+    final papua = Path()
+      ..moveTo(w * 0.80, h * 0.25)
+      ..lineTo(w * 0.90, h * 0.22)
+      ..lineTo(w * 0.95, h * 0.35)
+      ..lineTo(w * 0.88, h * 0.45)
+      ..lineTo(w * 0.75, h * 0.40)
+      ..lineTo(w * 0.73, h * 0.30)
+      ..close();
+    canvas.drawPath(papua, strokePaint);
 
     // ==========================================
-    // 2. SIMULASI PERINGATAN LEVEL KABUPATEN
-    // ==========================================
-
-    // Kab. Bulungan (Kalimantan Utara) - MERAH
-    final bulungan = Path()
-      ..moveTo(w * 0.32, h * 0.28)
-      ..lineTo(w * 0.40, h * 0.26)
-      ..lineTo(w * 0.42, h * 0.32)
-      ..lineTo(w * 0.34, h * 0.34)
-      ..close();
-    canvas.drawPath(bulungan, Paint()..color = const Color(0xFFEF4444).withOpacity(0.8));
-
-    // Kotawaringin Timur (Kalteng) - KUNING
-    final kotawaringin = Path()
-      ..moveTo(w * 0.36, h * 0.36)
-      ..lineTo(w * 0.46, h * 0.34)
-      ..lineTo(w * 0.48, h * 0.44)
-      ..lineTo(w * 0.38, h * 0.46)
-      ..close();
-    canvas.drawPath(kotawaringin, Paint()..color = const Color(0xFFF59E0B).withOpacity(0.8));
-
-    // Surabaya (Jawa Timur) - HIJAU (Aman)
-    final surabaya = Path()
-      ..moveTo(w * 0.42, h * 0.64)
-      ..lineTo(w * 0.48, h * 0.65)
-      ..lineTo(w * 0.47, h * 0.68)
-      ..lineTo(w * 0.41, h * 0.67)
-      ..close();
-    canvas.drawPath(surabaya, Paint()..color = const Color(0xFF10B981).withOpacity(0.8));
-
-    // Denpasar (Bali) - KUNING (Waspada)
-    final denpasar = Path()
-      ..moveTo(w * 0.49, h * 0.67)
-      ..lineTo(w * 0.51, h * 0.67)
-      ..lineTo(w * 0.51, h * 0.69)
-      ..lineTo(w * 0.49, h * 0.69)
-      ..close();
-    canvas.drawPath(denpasar, Paint()..color = const Color(0xFFF59E0B).withOpacity(0.8));
-
-    // Darwin (Australia) - KUNING
-    final darwin = Path()
-      ..moveTo(w * 0.52, h * 0.76)
-      ..lineTo(w * 0.60, h * 0.74)
-      ..lineTo(w * 0.62, h * 0.80)
-      ..lineTo(w * 0.54, h * 0.82)
-      ..close();
-    canvas.drawPath(darwin, Paint()..color = const Color(0xFFF59E0B).withOpacity(0.8));
-
-    // ==========================================
-    // 3. LABEL TEKS (Opsional, kecil)
+    // LABEL TEKS
     // ==========================================
     void drawText(String text, Offset offset, Color color, {double fontSize = 10}) {
       final textSpan = TextSpan(
@@ -1455,11 +1486,9 @@ class AsiaPacificWeatherMapPainter extends CustomPainter {
       textPainter.paint(canvas, offset);
     }
 
-    // Label di area yang diwarnai
-    drawText('Bulungan', Offset(w * 0.34, h * 0.30), Colors.white);
-    drawText('Kotawaringin', Offset(w * 0.38, h * 0.40), Colors.white);
-    drawText('Surabaya', Offset(w * 0.42, h * 0.66), Colors.white, fontSize: 8);
-    drawText('Darwin', Offset(w * 0.54, h * 0.78), Colors.white);
+    drawText('Bulungan', Offset(w * 0.35, h * 0.16), Colors.white);
+    drawText('Kotawaringin', Offset(w * 0.39, h * 0.27), Colors.white);
+    drawText('Jatim', Offset(w * 0.42, h * 0.55), Colors.white, fontSize: 8);
   }
 
   @override
