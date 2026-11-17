@@ -1,14 +1,8 @@
-import 'dart:async';
-import 'dart:convert';
-import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-
-// ==========================================
-// WEATHERFIT - MAIN APPLICATION (SINGLE FILE)
-// Fully Integrated: Dashboard, AiHelper, Chat, & Pro Warning Map
-// Optimized for MediaTek Helio G99 (60 FPS, No heavy blur)
-// ==========================================
+import 'dart:convert';
+import 'dart:math';
+import 'dart:async';
 
 void main() {
   runApp(const WeatherFitApp());
@@ -16,7 +10,6 @@ void main() {
 
 class WeatherFitApp extends StatelessWidget {
   const WeatherFitApp({super.key});
-
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
@@ -24,20 +17,14 @@ class WeatherFitApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         useMaterial3: true,
-        scaffoldBackgroundColor: const Color(0xFF0F172A), // Modern Dark Slate
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF38BDF8),
-          brightness: Brightness.dark,
-        ),
-        fontFamily: 'sans-serif',
+        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF4A90E2)),
       ),
       home: const WeatherScreen(),
     );
   }
 }
 
-// ================== DATA MODELS ==================
-
+// ================== MODEL ==================
 class DailyForecast {
   final DateTime date;
   final double tempMax;
@@ -105,34 +92,7 @@ class AiResult {
   AiResult({required this.text, required this.fallback});
 }
 
-enum WarningLevel { safe, warning, danger }
-
-class WeatherWarning {
-  final String regionId;
-  final String regionName;
-  final String levelName;
-  final WarningLevel level;
-  final String description;
-  final DateTime startTime;
-  final DateTime endTime;
-
-  WeatherWarning({
-    required this.regionId,
-    required this.regionName,
-    required this.levelName,
-    required this.level,
-    required this.description,
-    required this.startTime,
-    required this.endTime,
-  });
-
-  bool get isActive {
-    final now = DateTime.now();
-    return now.isAfter(startTime) && now.isBefore(endTime);
-  }
-}
-
-// ================== 1. AI HELPER (SMART & GITHUB-SAFE) ==================
+// ================== 1. AI HELPER ==================
 class AiHelper {
   static String get _apiKey {
     final k1 = ['s', 'k', '-', 'o', 'r', '-', 'v', '1'].join();
@@ -198,7 +158,7 @@ Jawab pertanyaan user: "$userQuestion" dengan bahasa santai, ramah, dan SANGAT S
               }
             }
           }
-        } catch (_) {
+        } catch (e) {
           continue; 
         }
       }
@@ -267,7 +227,7 @@ class WeatherService {
     http.Response response;
     try {
       response = await http.get(uri).timeout(const Duration(seconds: 15));
-    } catch (_) {
+    } catch (e) {
       throw Exception('Tidak dapat terhubung ke server.');
     }
     
@@ -455,7 +415,12 @@ class WeatherUtils {
   }
 
   static Color getWeatherColor(int code) {
-    return const Color(0xFF1E293B);
+    if (code == 0) return const Color(0xFF4A90E2);
+    if (code <= 3) return const Color(0xFF7B8FA1);
+    if (code <= 48) return const Color(0xFF9EA7B3);
+    if (code <= 67) return const Color(0xFF3A5A80);
+    if (code <= 82) return const Color(0xFF2C3E50);
+    return const Color(0xFF1A1F2E);
   }
 
   static String getUmbrellaRecommendation(int prob) {
@@ -471,9 +436,9 @@ class WeatherUtils {
   }
 
   static Color getUmbrellaColor(int prob) {
-    if (prob >= 60) return const Color(0xFFEF4444);
-    if (prob >= 30) return const Color(0xFFF59E0B);
-    return const Color(0xFF10B981);
+    if (prob >= 60) return const Color(0xFFE74C3C);
+    if (prob >= 30) return const Color(0xFFF39C12);
+    return const Color(0xFF27AE60);
   }
 
   static String getDayName(DateTime date) {
@@ -584,72 +549,18 @@ class _WeatherScreenState extends State<WeatherScreen> {
   String? _error;
   String _selectedModel = 'best_match';
   
-  String _displayCityName = 'Kec. Bulungan, Kalimantan Utara';
-  double _latitude = 2.85;
-  double _longitude = 117.35;
+  String _displayCityName = 'Jakarta, Indonesia';
+  double _latitude = -6.2088;
+  double _longitude = 106.8456;
 
   final TextEditingController _searchController = TextEditingController();
   List<CityLocation> _searchResults = [];
   bool _isSearching = false;
 
-  late List<WeatherWarning> _warnings;
-
   @override
   void initState() {
     super.initState();
-    _initWarningsData();
     _loadWeather();
-  }
-
-  void _initWarningsData() {
-    final now = DateTime.now();
-    _warnings = [
-      WeatherWarning(
-        regionId: 'kalut_01',
-        regionName: 'Kec. Bulungan, Kalimantan Utara',
-        levelName: 'Siaga / Bahaya Ekstrem',
-        level: WarningLevel.danger,
-        description: 'Potensi hujan sedang-lebat disertai kilat/petir intensif.',
-        startTime: now.subtract(const Duration(hours: 1)),
-        endTime: now.add(const Duration(hours: 3)),
-      ),
-      WeatherWarning(
-        regionId: 'gorontalo_01',
-        regionName: 'Kec. Kota Selatan, Gorontalo',
-        levelName: 'Waspada',
-        level: WarningLevel.warning,
-        description: 'Hujan intensitas ringan hingga sedang durasi sore hari.',
-        startTime: now.subtract(const Duration(hours: 2)),
-        endTime: now.add(const Duration(hours: 4)),
-      ),
-      WeatherWarning(
-        regionId: 'bali_01',
-        regionName: 'Kec. Denpasar Timur, Bali',
-        levelName: 'Aman Normal',
-        level: WarningLevel.safe,
-        description: 'Cuaca cerah berawan, angin sepoi-sepoi.',
-        startTime: now.subtract(const Duration(hours: 5)),
-        endTime: now.add(const Duration(hours: 5)),
-      ),
-      WeatherWarning(
-        regionId: 'jatim_01',
-        regionName: 'Kec. Gubeng, Surabaya, Jawa Timur',
-        levelName: 'Waspada Badai',
-        level: WarningLevel.warning,
-        description: 'Potensi hujan lebat disertai angin kencang.',
-        startTime: now.subtract(const Duration(hours: 1)),
-        endTime: now.add(const Duration(hours: 4)),
-      ),
-      WeatherWarning(
-        regionId: 'jakarta_01',
-        regionName: 'Kec. Menteng, Jakarta Pusat',
-        levelName: 'Aman Normal',
-        level: WarningLevel.safe,
-        description: 'Cerah berawan sepanjang siang hari.',
-        startTime: now.subtract(const Duration(hours: 3)),
-        endTime: now.add(const Duration(hours: 3)),
-      ),
-    ];
   }
 
   Future<void> _loadWeather() async {
@@ -696,7 +607,7 @@ class _WeatherScreenState extends State<WeatherScreen> {
     setState(() {
       _latitude = city.lat;
       _longitude = city.lon;
-      _displayCityName = '${city.name}, ${city.admin1.isNotEmpty ? city.admin1 : city.country}';
+      _displayCityName = '${city.name}, ${city.country}';
       _searchResults = [];
       _searchController.clear();
     });
@@ -736,18 +647,11 @@ class _WeatherScreenState extends State<WeatherScreen> {
     }
   }
 
-  WeatherWarning? _getCurrentUserWarning() {
-    try {
-      return _warnings.firstWhere(
-        (w) => _displayCityName.toLowerCase().contains(w.regionName.split(',').first.trim().toLowerCase()) && w.isActive,
-      );
-    } catch (_) {
-      try {
-        return _warnings.firstWhere((w) => w.isActive);
-      } catch (_) {
-        return null;
-      }
-    }
+  void _openWeatherMap() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const AsiaPacificMapScreen()),
+    );
   }
 
   @override
@@ -762,11 +666,14 @@ class _WeatherScreenState extends State<WeatherScreen> {
     }
 
     final today = (_weather != null && _weather!.isNotEmpty) ? _weather!.first : null;
+    
+    final activeCode = currentHourData?.weatherCode ?? today?.weatherCode ?? 0;
+    final bgColor = WeatherUtils.getWeatherColor(activeCode);
+
     int activeRainProbability = currentHourData?.precipitationProbability ?? today?.precipitationProbability ?? 0;
-    final activeWarning = _getCurrentUserWarning();
 
     return Scaffold(
-      backgroundColor: const Color(0xFF0F172A),
+      backgroundColor: bgColor,
       body: SafeArea(
         child: _loading
             ? const WeatherLoadingWidget()
@@ -778,23 +685,22 @@ class _WeatherScreenState extends State<WeatherScreen> {
                       children: [
                         Container(
                           decoration: BoxDecoration(
-                            color: const Color(0xFF1E293B),
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(color: const Color(0xFF334155)),
+                            color: Colors.white.withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(12),
                           ),
                           child: TextField(
                             controller: _searchController,
                             onChanged: _onSearchChanged,
                             style: const TextStyle(color: Colors.white),
                             decoration: InputDecoration(
-                              hintText: 'Cari wilayah/kecamatan di Asia Pasifik & Dunia...',
-                              hintStyle: const TextStyle(color: Colors.white54, fontSize: 13),
+                              hintText: 'Cari kota di seluruh dunia...',
+                              hintStyle: const TextStyle(color: Colors.white70),
                               border: InputBorder.none,
-                              prefixIcon: const Icon(Icons.search, color: Color(0xFF38BDF8)),
+                              prefixIcon: const Icon(Icons.search, color: Colors.white),
                               suffixIcon: _isSearching 
                                   ? const Padding(
                                       padding: EdgeInsets.all(12.0),
-                                      child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Color(0xFF38BDF8), strokeWidth: 2)),
+                                      child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)),
                                     )
                                   : null,
                             ),
@@ -805,10 +711,9 @@ class _WeatherScreenState extends State<WeatherScreen> {
                             margin: const EdgeInsets.only(top: 8),
                             constraints: const BoxConstraints(maxHeight: 250),
                             decoration: BoxDecoration(
-                              color: const Color(0xFF1E293B),
-                              borderRadius: BorderRadius.circular(16),
-                              border: Border.all(color: const Color(0xFF334155)),
-                              boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.4), blurRadius: 10)],
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(12),
+                              boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 10)],
                             ),
                             child: ListView.builder(
                               shrinkWrap: true,
@@ -817,9 +722,9 @@ class _WeatherScreenState extends State<WeatherScreen> {
                                 final city = _searchResults[index];
                                 final subtitle = [city.admin1, city.country].where((e) => e.isNotEmpty).join(', ');
                                 return ListTile(
-                                  leading: const Icon(Icons.location_on, color: Color(0xFF38BDF8)),
-                                  title: Text(city.name, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
-                                  subtitle: Text(subtitle, style: const TextStyle(color: Colors.white70)),
+                                  leading: const Icon(Icons.location_on, color: Color(0xFF4A90E2)),
+                                  title: Text(city.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+                                  subtitle: Text(subtitle),
                                   onTap: () => _selectCity(city),
                                 );
                               },
@@ -831,7 +736,7 @@ class _WeatherScreenState extends State<WeatherScreen> {
                   Expanded(
                     child: _error != null
                         ? _buildError()
-                        : _buildContent(today!, currentHourData, activeRainProbability, activeWarning),
+                        : _buildContent(today!, currentHourData, activeRainProbability),
                   ),
                 ],
               ),
@@ -846,37 +751,19 @@ class _WeatherScreenState extends State<WeatherScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.error_outline, color: Colors.redAccent, size: 64),
+            const Icon(Icons.error_outline, color: Colors.white, size: 64),
             const SizedBox(height: 16),
             Text(_error ?? 'Terjadi kesalahan', style: const TextStyle(color: Colors.white, fontSize: 14), textAlign: TextAlign.center),
             const SizedBox(height: 16),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF38BDF8), foregroundColor: Colors.black),
-              onPressed: _loadWeather, 
-              child: const Text('Coba Lagi'),
-            ),
+            ElevatedButton(onPressed: _loadWeather, child: const Text('Coba Lagi')),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildContent(DailyForecast today, HourlyForecast? currentHour, int activeRainProbability, WeatherWarning? activeWarning) {
-    final warningColor = activeWarning?.level == WarningLevel.danger
-        ? Colors.redAccent
-        : activeWarning?.level == WarningLevel.warning
-            ? Colors.amberAccent
-            : Colors.greenAccent;
-
-    final warningBgColor = activeWarning?.level == WarningLevel.danger
-        ? Colors.red.withOpacity(0.15)
-        : activeWarning?.level == WarningLevel.warning
-            ? Colors.amber.withOpacity(0.15)
-            : Colors.green.withOpacity(0.15);
-
+  Widget _buildContent(DailyForecast today, HourlyForecast? currentHour, int activeRainProbability) {
     return RefreshIndicator(
-      color: const Color(0xFF38BDF8),
-      backgroundColor: const Color(0xFF1E293B),
       onRefresh: _loadWeather,
       child: SingleChildScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
@@ -898,45 +785,43 @@ class _WeatherScreenState extends State<WeatherScreen> {
                   children: [
                     IconButton(
                       onPressed: _loadWeather, 
-                      icon: const Icon(Icons.refresh, color: Colors.white70),
+                      icon: const Icon(Icons.refresh, color: Colors.white),
                     ),
                     PopupMenuButton<String>(
                       icon: const Icon(Icons.more_vert, color: Colors.white),
-                      color: const Color(0xFF1E293B),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                        side: const BorderSide(color: Color(0xFF334155)),
-                      ),
+                      color: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                       onSelected: (value) {
                         if (value == 'open_ai_chat') {
                           _openAiChat();
-                        } else if (value == 'map_warning') {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => WeatherMapPage(warnings: _warnings),
-                            ),
-                          );
+                        } else if (value == 'open_map') {
+                          _openWeatherMap();
                         }
                       },
                       itemBuilder: (context) => [
                         const PopupMenuItem(
-                          value: 'map_warning',
+                          value: 'open_ai_chat',
                           child: Row(
                             children: [
-                              Icon(Icons.map_outlined, color: Color(0xFF38BDF8), size: 20),
+                              Icon(Icons.cloud_done, color: Color(0xFF4A90E2), size: 20),
                               SizedBox(width: 10),
-                              Text('Peta Peringatan Cuaca', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w500)),
+                              Text(
+                                'Help from the Clouds',
+                                style: TextStyle(fontWeight: FontWeight.w600, color: Color(0xFF2C3E50)),
+                              ),
                             ],
                           ),
                         ),
                         const PopupMenuItem(
-                          value: 'open_ai_chat',
+                          value: 'open_map',
                           child: Row(
                             children: [
-                              Icon(Icons.cloud_done, color: Color(0xFF38BDF8), size: 20),
+                              Icon(Icons.map, color: Color(0xFFE74C3C), size: 20),
                               SizedBox(width: 10),
-                              Text('Help from the Clouds', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w500)),
+                              Text(
+                                'Peta Peringatan Dini',
+                                style: TextStyle(fontWeight: FontWeight.w600, color: Color(0xFF2C3E50)),
+                              ),
                             ],
                           ),
                         ),
@@ -946,60 +831,17 @@ class _WeatherScreenState extends State<WeatherScreen> {
                 ),
               ],
             ),
-            const SizedBox(height: 20),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: warningBgColor,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: warningColor, width: 1),
-              ),
-              child: Row(
-                children: [
-                  Icon(
-                    activeWarning?.level == WarningLevel.danger
-                        ? Icons.warning_amber_rounded
-                        : Icons.info_outline,
-                    color: warningColor,
-                    size: 28,
-                  ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          activeWarning?.levelName ?? 'Kondisi Normal / Aman',
-                          style: TextStyle(
-                            color: warningColor,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 14,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          activeWarning?.description ?? 'Wilayah terpantau stabil, tidak ada anomali cuaca ekstrem.',
-                          style: const TextStyle(
-                            color: Colors.white70,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 24),
             _buildModelSelector(),
-            const SizedBox(height: 20),
-            _buildCurrentWeather(today!, currentHour),
-            const SizedBox(height: 20),
+            const SizedBox(height: 24),
+            _buildCurrentWeather(today, currentHour),
+            const SizedBox(height: 24),
             _buildUmbrellaRecommendation(activeRainProbability),
-            const SizedBox(height: 20),
+            
+            const SizedBox(height: 24),
             _buildHourlySection(),
-            const SizedBox(height: 20),
+
+            const SizedBox(height: 24),
             const Text('Prakiraan 10 Hari', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600)),
             const SizedBox(height: 12),
             ..._weather!.asMap().entries.map((entry) {
@@ -1027,29 +869,28 @@ class _WeatherScreenState extends State<WeatherScreen> {
         SizedBox(
           height: 135,
           child: ListView.builder(
-            physics: const BouncingScrollPhysics(),
             scrollDirection: Axis.horizontal,
             itemCount: items.length,
             itemBuilder: (context, index) {
               final h = items[index];
               final timeStr = '${h.time.hour.toString().padLeft(2, '0')}:00';
-              final rainColor = h.precipitationProbability >= 60 ? const Color(0xFFEF4444) : h.precipitationProbability >= 30 ? const Color(0xFFF59E0B) : const Color(0xFF10B981);
+              final rainColor = h.precipitationProbability >= 60 ? const Color(0xFFE74C3C) : h.precipitationProbability >= 30 ? const Color(0xFFF39C12) : const Color(0xFF3498DB);
               
               return Container(
                 width: 85,
                 margin: const EdgeInsets.only(right: 10),
                 padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF1E293B),
+                  color: Colors.white,
                   borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: const Color(0xFF334155)),
+                  boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.08), blurRadius: 8, offset: const Offset(0, 2))],
                 ),
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.spaceAround,
                   children: [
-                    Text(timeStr, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.white70)),
-                    Icon(WeatherUtils.getWeatherIcon(h.weatherCode), color: const Color(0xFF38BDF8), size: 26),
-                    Text('${h.temp.round()}°', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
+                    Text(timeStr, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF2C3E50))),
+                    Icon(WeatherUtils.getWeatherIcon(h.weatherCode), color: const Color(0xFF4A90E2), size: 26),
+                    Text('${h.temp.round()}°', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF2C3E50))),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
@@ -1076,11 +917,7 @@ class _WeatherScreenState extends State<WeatherScreen> {
     ];
     return Container(
       padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1E293B),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFF334155)),
-      ),
+      decoration: BoxDecoration(color: Colors.white.withOpacity(0.15), borderRadius: BorderRadius.circular(12)),
       child: Row(
         children: models.map((m) {
           final isSelected = m['key'] == _selectedModel;
@@ -1090,19 +927,9 @@ class _WeatherScreenState extends State<WeatherScreen> {
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 200),
                 padding: const EdgeInsets.symmetric(vertical: 10),
-                decoration: BoxDecoration(
-                  color: isSelected ? const Color(0xFF38BDF8) : Colors.transparent,
-                  borderRadius: BorderRadius.circular(12),
-                ),
+                decoration: BoxDecoration(color: isSelected ? Colors.white : Colors.transparent, borderRadius: BorderRadius.circular(8)),
                 child: Center(
-                  child: Text(
-                    m['label']!,
-                    style: TextStyle(
-                      color: isSelected ? const Color(0xFF0F172A) : Colors.white70,
-                      fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                      fontSize: 13,
-                    ),
-                  ),
+                  child: Text(m['label']!, style: TextStyle(color: isSelected ? const Color(0xFF2C3E50) : Colors.white, fontWeight: isSelected ? FontWeight.bold : FontWeight.normal, fontSize: 13)),
                 ),
               ),
             ),
@@ -1118,11 +945,7 @@ class _WeatherScreenState extends State<WeatherScreen> {
     final text = WeatherUtils.getUmbrellaRecommendation(probability);
     return Container(
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1E293B),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFF334155)),
-      ),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 12, offset: const Offset(0, 4))]),
       child: Row(
         children: [
           Container(
@@ -1135,10 +958,10 @@ class _WeatherScreenState extends State<WeatherScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Rekomendasi Saat Ini', style: TextStyle(fontSize: 12, color: Colors.white54, fontWeight: FontWeight.w500)),
+                const Text('Rekomendasi Saat Ini', style: TextStyle(fontSize: 12, color: Color(0xFF7B8FA1), fontWeight: FontWeight.w500)),
                 const SizedBox(height: 2),
-                Text(text, style: TextStyle(fontSize: 16, color: color, fontWeight: FontWeight.bold)),
-                Text('Peluang hujan jam ini $probability%', style: const TextStyle(fontSize: 12, color: Colors.white70)),
+                Text(text, style: TextStyle(fontSize: 17, color: color, fontWeight: FontWeight.bold)),
+                Text('Peluang hujan jam ini $probability%', style: const TextStyle(fontSize: 12, color: Color(0xFF7B8FA1))),
               ],
             ),
           ),
@@ -1148,23 +971,19 @@ class _WeatherScreenState extends State<WeatherScreen> {
   }
 
   Widget _buildForecastCard({required DailyForecast forecast, required String label}) {
-    final rainColor = forecast.precipitationProbability >= 60 ? const Color(0xFFEF4444) : forecast.precipitationProbability >= 30 ? const Color(0xFFF59E0B) : const Color(0xFF10B981);
+    final rainColor = forecast.precipitationProbability >= 60 ? const Color(0xFFE74C3C) : forecast.precipitationProbability >= 30 ? const Color(0xFFF39C12) : const Color(0xFF3498DB);
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1E293B),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFF334155)),
-      ),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.08), blurRadius: 8, offset: const Offset(0, 2))]),
       child: Row(
         children: [
-          SizedBox(width: 60, child: Text(label, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.white))),
-          Icon(WeatherUtils.getWeatherIcon(forecast.weatherCode), color: const Color(0xFF38BDF8), size: 26),
+          SizedBox(width: 60, child: Text(label, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Color(0xFF2C3E50)))),
+          Icon(WeatherUtils.getWeatherIcon(forecast.weatherCode), color: const Color(0xFF4A90E2), size: 26),
           const SizedBox(width: 12),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(color: rainColor.withOpacity(0.15), borderRadius: BorderRadius.circular(8)),
+            decoration: BoxDecoration(color: rainColor.withOpacity(0.12), borderRadius: BorderRadius.circular(8)),
             child: Row(
               children: [
                 Icon(Icons.water_drop, size: 12, color: rainColor),
@@ -1174,9 +993,9 @@ class _WeatherScreenState extends State<WeatherScreen> {
             ),
           ),
           const Spacer(),
-          Text('${forecast.tempMin.round()}°', style: const TextStyle(fontSize: 14, color: Colors.white54)),
+          Text('${forecast.tempMin.round()}°', style: const TextStyle(fontSize: 14, color: Color(0xFF95A5A6))),
           const SizedBox(width: 8),
-          Text('${forecast.tempMax.round()}°', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
+          Text('${forecast.tempMax.round()}°', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF2C3E50))),
         ],
       ),
     );
@@ -1188,434 +1007,463 @@ class _WeatherScreenState extends State<WeatherScreen> {
     final rainProb = currentHour?.precipitationProbability ?? today.precipitationProbability;
     final description = WeatherUtils.getWeatherDescription(code);
 
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFF1E293B), Color(0xFF334155)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0xFF334155)),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          Icon(WeatherUtils.getWeatherIcon(code), color: const Color(0xFF38BDF8), size: 72),
-          const SizedBox(width: 20),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('$temp°', style: const TextStyle(color: Colors.white, fontSize: 56, fontWeight: FontWeight.w300, height: 1)),
-                const SizedBox(height: 4),
-                Text(description, style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600)),
-                const SizedBox(height: 2),
-                Text('Min ${today.tempMin.round()}° • Hujan $rainProb%', style: const TextStyle(color: Colors.white70, fontSize: 13)),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ================== WEATHER MAP INTERACTIVE PAGE (PRO VERSION) ==================
-class WeatherMapPage extends StatefulWidget {
-  final List<WeatherWarning> warnings;
-
-  const WeatherMapPage({super.key, required this.warnings});
-
-  @override
-  State<WeatherMapPage> createState() => _WeatherMapPageState();
-}
-
-class _WeatherMapPageState extends State<WeatherMapPage> {
-  String _searchQuery = "";
-  double _zoomScale = 1.2;
-
-  @override
-  Widget build(BuildContext context) {
-    final filteredWarnings = widget.warnings.where((w) {
-      return w.regionName.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-          w.levelName.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-          w.description.toLowerCase().contains(_searchQuery.toLowerCase());
-    }).toList();
-
-    return Scaffold(
-      backgroundColor: const Color(0xFF0F172A),
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF1E293B),
-        elevation: 0,
-        iconTheme: const IconThemeData(color: Colors.white),
-        title: const Text('Peta Peringatan Dini Asia Pasifik', style: TextStyle(fontSize: 16, color: Colors.white, fontWeight: FontWeight.bold)),
-      ),
-      body: Column(
-        children: [
-          // ==========================================
-          // BANNER WAKTU BERLAKU (ALA BMKG PROFESSIONAL)
-          // ==========================================
-          Container(
-            width: double.infinity,
-            margin: const EdgeInsets.fromLTRB(12, 12, 12, 0),
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [Color(0xFF1E293B), Color(0xFF334155)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: const Color(0xFF38BDF8).withOpacity(0.3)),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Row(
-                  children: [
-                    const Icon(Icons.access_time_filled, color: Color(0xFF38BDF8), size: 20),
-                    const SizedBox(width: 8),
-                    const Text(
-                      'Masa Berlaku Peringatan:',
-                      style: TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w500),
-                    ),
-                  ],
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF38BDF8).withOpacity(0.15),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Text(
-                    '14:30 - 18:00 WITA',
-                    style: TextStyle(color: Color(0xFF38BDF8), fontSize: 12, fontWeight: FontWeight.bold),
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          // ==========================================
-          // INTERACTIVE MAP CONTAINER (PRO REGIONAL BLOCKS)
-          // ==========================================
-          Expanded(
-            flex: 6,
-            child: Container(
-              margin: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: const Color(0xFF0B132B),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: const Color(0xFF334155)),
-              ),
-              child: Stack(
-                children: [
-                  InteractiveViewer(
-                    minScale: 1.0,
-                    maxScale: 4.0,
-                    onInteractionUpdate: (details) {
-                      setState(() {
-                        _zoomScale = details.scale;
-                      });
-                    },
-                    child: Center(
-                      child: CustomPaint(
-                        size: const Size(double.infinity, double.infinity),
-                        painter: AsiaPacificProMapPainter(warnings: widget.warnings, zoom: _zoomScale),
-                      ),
-                    ),
-                  ),
-                  Positioned(
-                    top: 16,
-                    left: 16,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: Colors.black87,
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: Colors.white24),
-                      ),
-                      child: Text(
-                        'Zoom: ${_zoomScale.toStringAsFixed(1)}x (${_zoomScale > 2.0 ? "Detail Level Kecamatan" : "Level Provinsi/Region"})',
-                        style: const TextStyle(color: Colors.white70, fontSize: 11),
-                      ),
-                    ),
-                  ),
-                  Positioned(
-                    bottom: 16,
-                    right: 16,
-                    child: Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF1E293B).withOpacity(0.95),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: const Color(0xFF334155)),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: const [
-                          _LegendItem(color: Colors.greenAccent, label: 'Hijau (Aman / Normal)'),
-                          SizedBox(height: 4),
-                          _LegendItem(color: Colors.amberAccent, label: 'Kuning (Waspada Badai)'),
-                          SizedBox(height: 4),
-                          _LegendItem(color: Colors.redAccent, label: 'Merah (Bahaya / Siaga)'),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-
-          // ==========================================
-          // SEARCH & REGIONAL WARNING CARDS LIST
-          // ==========================================
-          Expanded(
-            flex: 4,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Column(
-                children: [
-                  TextField(
-                    onChanged: (value) {
-                      setState(() {
-                        _searchQuery = value;
-                      });
-                    },
-                    style: const TextStyle(color: Colors.white),
-                    decoration: InputDecoration(
-                      hintText: 'Cari Peringatan Wilayah / Kecamatan...',
-                      hintStyle: const TextStyle(color: Colors.white54, fontSize: 13),
-                      prefixIcon: const Icon(Icons.search, color: Color(0xFF38BDF8)),
-                      filled: true,
-                      fillColor: const Color(0xFF1E293B),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(16),
-                        borderSide: BorderSide.none,
-                      ),
-                      contentPadding: const EdgeInsets.symmetric(vertical: 0),
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  Expanded(
-                    child: ListView.builder(
-                      physics: const BouncingScrollPhysics(),
-                      itemCount: filteredWarnings.length,
-                      itemBuilder: (context, index) {
-                        final warning = filteredWarnings[index];
-                        final color = warning.level == WarningLevel.danger
-                            ? Colors.redAccent
-                            : warning.level == WarningLevel.warning
-                                ? Colors.amberAccent
-                                : Colors.greenAccent;
-
-                        return Container(
-                          margin: const EdgeInsets.only(bottom: 10),
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF1E293B),
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(color: color.withOpacity(0.4)),
-                          ),
-                          child: Row(
-                            children: [
-                              Container(
-                                width: 4,
-                                height: 42,
-                                decoration: BoxDecoration(
-                                  color: color,
-                                  borderRadius: BorderRadius.circular(2),
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        warning.regionName,
-                                        style: const TextStyle(
-                                          color: Colors.white,
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 14,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 2),
-                                      Text(
-                                        warning.description,
-                                        style: const TextStyle(
-                                          color: Colors.white70,
-                                          fontSize: 12,
-                                        ),
-                                      ),
-                                    ],
-                                ),
-                              ),
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                decoration: BoxDecoration(
-                                  color: color.withOpacity(0.2),
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: Text(
-                                  warning.isActive ? 'Aktif' : 'Lewat',
-                                  style: TextStyle(
-                                    color: color,
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _LegendItem extends StatelessWidget {
-  final Color color;
-  final String label;
-
-  const _LegendItem({required this.color, required this.label});
-
-  @override
-  Widget build(BuildContext context) {
     return Row(
-      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Container(width: 10, height: 10, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
-        const SizedBox(width: 6),
-        Text(label, style: const TextStyle(color: Colors.white70, fontSize: 11)),
+        Icon(WeatherUtils.getWeatherIcon(code), color: Colors.white, size: 80),
+        const SizedBox(width: 20),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('$temp°', style: const TextStyle(color: Colors.white, fontSize: 64, fontWeight: FontWeight.w200, height: 1)),
+              Text(description, style: const TextStyle(color: Colors.white70, fontSize: 16)),
+              Text('Min ${today.tempMin.round()}° • Hujan $rainProb%', style: const TextStyle(color: Colors.white60, fontSize: 13)),
+            ],
+          ),
+        ),
       ],
     );
   }
 }
 
-// ================== PRO ASIA PACIFIC MAP PAINTER ==================
-class AsiaPacificProMapPainter extends CustomPainter {
-  final List<WeatherWarning> warnings;
-  final double zoom;
-
-  AsiaPacificProMapPainter({required this.warnings, required this.zoom});
+// ================== 2. PETA PERINGATAN DINI ASIA PASIFIK ==================
+class AsiaPacificMapScreen extends StatefulWidget {
+  const AsiaPacificMapScreen({super.key});
 
   @override
+  State<AsiaPacificMapScreen> createState() => _AsiaPacificMapScreenState();
+}
+
+class _AsiaPacificMapScreenState extends State<AsiaPacificMapScreen> {
+  final TransformationController _transformationController = TransformationController();
+
+  @override
+  void dispose() {
+    _transformationController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFF0F172A), // Dark navy background
+      appBar: AppBar(
+        backgroundColor: const Color(0xFF1E293B),
+        iconTheme: const IconThemeData(color: Colors.white),
+        title: const Text(
+          'Peta Peringatan Dini Asia Pasifik',
+          style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+        ),
+      ),
+      body: Column(
+        children: [
+          // Banner Masa Berlaku
+          Container(
+            margin: const EdgeInsets.all(12),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              color: const Color(0xFF1E3A5F),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFF3B82F6).withOpacity(0.3)),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.access_time, color: Color(0xFF60A5FA), size: 20),
+                const SizedBox(width: 10),
+                const Expanded(
+                  child: Text(
+                    'Masa Berlaku Peringatan:',
+                    style: TextStyle(color: Colors.white70, fontSize: 13),
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF3B82F6).withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Text(
+                    '14:30 - 18:00 WITA',
+                    style: TextStyle(color: Color(0xFF60A5FA), fontSize: 13, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          
+          // Peta Interaktif
+          Expanded(
+            flex: 3,
+            child: Container(
+              margin: const EdgeInsets.symmetric(horizontal: 12),
+              decoration: BoxDecoration(
+                color: const Color(0xFF111827),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: const Color(0xFF334155)),
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: InteractiveViewer(
+                transformationController: _transformationController,
+                minScale: 0.5,
+                maxScale: 5.0,
+                boundaryMargin: const EdgeInsets.all(100),
+                child: Stack(
+                  children: [
+                    // Background Grid
+                    Positioned.fill(
+                      child: CustomPaint(painter: GridPainter()),
+                    ),
+                    // Peta
+                    Positioned.fill(
+                      child: CustomPaint(
+                        painter: AsiaPacificWeatherMapPainter(),
+                      ),
+                    ),
+                    // Zoom Label
+                    Positioned(
+                      top: 12,
+                      left: 12,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withOpacity(0.6),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Text(
+                          'Zoom: 1.0x (Level Kabupaten/Kota)',
+                          style: TextStyle(color: Colors.white70, fontSize: 11),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          
+          // Legenda
+          Container(
+            margin: const EdgeInsets.all(12),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: const Color(0xFF1E293B),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                _buildLegendItem(const Color(0xFF10B981), 'Hijau (Aman)'),
+                _buildLegendItem(const Color(0xFFF59E0B), 'Kuning (Waspada)'),
+                _buildLegendItem(const Color(0xFFEF4444), 'Merah (Bahaya)'),
+              ],
+            ),
+          ),
+
+          // Daftar Peringatan (Simulasi Detail Kabupaten)
+          Expanded(
+            flex: 2,
+            child: ListView(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              children: [
+                _buildWarningCard(
+                  title: 'Kab. Bulungan, Kalimantan Utara',
+                  description: 'Potensi hujan sedang-lebat disertai kilat/petir intensif.',
+                  color: const Color(0xFFEF4444),
+                ),
+                _buildWarningCard(
+                  title: 'Kab. Kotawaringin Timur, Kalteng',
+                  description: 'Hujan intensitas ringan hingga sedang durasi sore hari.',
+                  color: const Color(0xFFF59E0B),
+                ),
+                _buildWarningCard(
+                  title: 'Kota Surabaya, Jawa Timur',
+                  description: 'Cuaca cerah berawan, angin semilir.',
+                  color: const Color(0xFF10B981),
+                ),
+                _buildWarningCard(
+                  title: 'Kota Denpasar, Bali',
+                  description: 'Potensi hujan ringan pada malam hari.',
+                  color: const Color(0xFF10B981),
+                ),
+                _buildWarningCard(
+                  title: 'Kota Darwin, Australia',
+                  description: 'Peringatan Gelombang Panas (Heatwave).',
+                  color: const Color(0xFFF59E0B),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLegendItem(Color color, String label) {
+    return Row(
+      children: [
+        Container(
+          width: 12,
+          height: 12,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 6),
+        Text(label, style: const TextStyle(color: Colors.white70, fontSize: 11)),
+      ],
+    );
+  }
+
+  Widget _buildWarningCard({required String title, required String description, required Color color}) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1E293B),
+        borderRadius: BorderRadius.circular(12),
+        border: Border(left: BorderSide(color: color, width: 4)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Text(
+                  title,
+                  style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  'Aktif',
+                  style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            description,
+            style: const TextStyle(color: Colors.white60, fontSize: 12),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ================== CUSTOM PAINTERS ==================
+
+// Grid Background
+class GridPainter extends CustomPainter {
+  @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint()..style = PaintingStyle.fill;
+    final paint = Paint()
+      ..color = const Color(0xFF1E293B)
+      ..strokeWidth = 1.0;
 
-    // Ocean Background Canvas
-    paint.color = const Color(0xFF0F172A);
-    canvas.drawRect(Rect.fromLTWH(0, 0, size.width, size.height), paint);
-
-    // Draw subtle grid lines for radar effect
-    final gridPaint = Paint()
-      ..color = Colors.white12
-      ..strokeWidth = 0.5;
-    for (double i = 0; i < size.width; i += 40 * zoom) {
-      canvas.drawLine(Offset(i, 0), Offset(i, size.height), gridPaint);
-    }
-    for (double j = 0; j < size.height; j += 40 * zoom) {
-      canvas.drawLine(Offset(0, j), Offset(size.width, j), gridPaint);
+    // Garis Vertikal
+    for (double i = 0; i < size.width; i += 40) {
+      canvas.drawLine(Offset(i, 0), Offset(i, size.height), paint);
     }
 
-    // Regional Blocks representing Asia-Pacific / Indonesia Islands with full polygon/region fill
-    // 1. Kalimantan (Danger/Red)
-    paint.color = Colors.redAccent.withOpacity(0.5);
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        Rect.fromLTWH(size.width * 0.25, size.height * 0.35, size.width * 0.22 * zoom, size.height * 0.25 * zoom),
-        const Radius.circular(12),
-      ),
-      paint,
-    );
+    // Garis Horizontal
+    for (double i = 0; i < size.height; i += 40) {
+      canvas.drawLine(Offset(0, i), Offset(size.width, i), paint);
+    }
+  }
 
-    // 2. Sulawesi / Gorontalo (Warning/Yellow)
-    paint.color = Colors.amberAccent.withOpacity(0.5);
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        Rect.fromLTWH(size.width * 0.52, size.height * 0.4, size.width * 0.16 * zoom, size.height * 0.22 * zoom),
-        const Radius.circular(12),
-      ),
-      paint,
-    );
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
 
-    // 3. Jawa & Bali (Warning & Safe Mix)
-    paint.color = Colors.amberAccent.withOpacity(0.5);
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        Rect.fromLTWH(size.width * 0.28, size.height * 0.68, size.width * 0.25 * zoom, size.height * 0.12 * zoom),
-        const Radius.circular(10),
-      ),
-      paint,
-    );
+// Peta Asia Pasifik dengan Simulasi Kabupaten
+class AsiaPacificWeatherMapPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final w = size.width;
+    final h = size.height;
 
-    paint.color = Colors.greenAccent.withOpacity(0.5);
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        Rect.fromLTWH(size.width * 0.56, size.height * 0.7, size.width * 0.12 * zoom, size.height * 0.1 * zoom),
-        const Radius.circular(8),
-      ),
-      paint,
-    );
+    // ==========================================
+    // 1. PENGGAMBARAN PULAU BESAR (Siluet Kasar)
+    // ==========================================
+    
+    // Fungsi helper untuk menggambar pulau
+    void drawIsland(List<Offset> points, Color color, {bool strokeOnly = false}) {
+      final path = Path();
+      if (points.isEmpty) return;
+      path.moveTo(points[0].dx, points[0].dy);
+      for (int i = 1; i < points.length; i++) {
+        path.lineTo(points[i].dx, points[i].dy);
+      }
+      path.close();
 
-    // 4. Sumatera Region (Safe/Green)
-    paint.color = Colors.greenAccent.withOpacity(0.4);
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        Rect.fromLTWH(size.width * 0.08, size.height * 0.3, size.width * 0.14 * zoom, size.height * 0.35 * zoom),
-        const Radius.circular(12),
-      ),
-      paint,
-    );
+      final paint = Paint()
+        ..color = color
+        ..style = strokeOnly ? PaintingStyle.stroke : PaintingStyle.fill;
 
-    // 5. Papua & Eastern Region (Safe/Green)
-    paint.color = Colors.greenAccent.withOpacity(0.4);
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        Rect.fromLTWH(size.width * 0.74, size.height * 0.45, size.width * 0.2 * zoom, size.height * 0.25 * zoom),
-        const Radius.circular(12),
-      ),
-      paint,
-    );
+      if (strokeOnly) {
+        paint.strokeWidth = 1.5;
+        paint.color = const Color(0xFF475569);
+      }
 
-    // Draw Region Labels for Professional Look
-    final textPainter = TextPainter(
-      textDirection: TextDirection.ltr,
-      textAlign: TextAlign.center,
-    );
+      canvas.drawPath(path, paint);
+    }
 
-    void drawLabel(String text, Offset offset, Color color) {
-      textPainter.text = TextSpan(
+    // --- INDONESIA (Kepulauan) ---
+    // Sumatera
+    final sumatera = [
+      Offset(w * 0.15, h * 0.25),
+      Offset(w * 0.22, h * 0.30),
+      Offset(w * 0.25, h * 0.45),
+      Offset(w * 0.20, h * 0.55),
+      Offset(w * 0.12, h * 0.50),
+      Offset(w * 0.10, h * 0.35),
+    ];
+    drawIsland(sumatera, const Color(0xFF10B981).withOpacity(0.6), strokeOnly: true);
+
+    // Jawa
+    final jawa = [
+      Offset(w * 0.25, h * 0.62),
+      Offset(w * 0.35, h * 0.64),
+      Offset(w * 0.45, h * 0.66),
+      Offset(w * 0.48, h * 0.64),
+      Offset(w * 0.40, h * 0.62),
+      Offset(w * 0.30, h * 0.60),
+    ];
+    drawIsland(jawa, const Color(0xFF10B981).withOpacity(0.6), strokeOnly: true);
+
+    // Kalimantan
+    final kalimantan = [
+      Offset(w * 0.30, h * 0.30),
+      Offset(w * 0.45, h * 0.28),
+      Offset(w * 0.50, h * 0.38),
+      Offset(w * 0.48, h * 0.50),
+      Offset(w * 0.35, h * 0.52),
+      Offset(w * 0.28, h * 0.45),
+    ];
+    drawIsland(kalimantan, const Color(0xFF10B981).withOpacity(0.6), strokeOnly: true);
+
+    // Sulawesi
+    final sulawesi = [
+      Offset(w * 0.52, h * 0.30),
+      Offset(w * 0.58, h * 0.28),
+      Offset(w * 0.62, h * 0.35),
+      Offset(w * 0.58, h * 0.45),
+      Offset(w * 0.50, h * 0.42),
+      Offset(w * 0.55, h * 0.35),
+    ];
+    drawIsland(sulawesi, const Color(0xFF10B981).withOpacity(0.6), strokeOnly: true);
+
+    // Papua
+    final papua = [
+      Offset(w * 0.75, h * 0.35),
+      Offset(w * 0.85, h * 0.32),
+      Offset(w * 0.90, h * 0.45),
+      Offset(w * 0.82, h * 0.55),
+      Offset(w * 0.72, h * 0.50),
+      Offset(w * 0.70, h * 0.40),
+    ];
+    drawIsland(papua, const Color(0xFF10B981).withOpacity(0.6), strokeOnly: true);
+
+    // Filipina (Utara Kalimantan)
+    final filipina = [
+      Offset(w * 0.45, h * 0.10),
+      Offset(w * 0.50, h * 0.12),
+      Offset(w * 0.48, h * 0.22),
+      Offset(w * 0.42, h * 0.18),
+    ];
+    drawIsland(filipina, const Color(0xFF10B981).withOpacity(0.6), strokeOnly: true);
+
+    // Australia (Darwin Area)
+    final australia = [
+      Offset(w * 0.50, h * 0.75),
+      Offset(w * 0.70, h * 0.70),
+      Offset(w * 0.80, h * 0.85),
+      Offset(w * 0.60, h * 0.95),
+      Offset(w * 0.45, h * 0.90),
+    ];
+    drawIsland(australia, const Color(0xFF10B981).withOpacity(0.6), strokeOnly: true);
+
+    // ==========================================
+    // 2. SIMULASI PERINGATAN LEVEL KABUPATEN
+    // ==========================================
+
+    // Kab. Bulungan (Kalimantan Utara) - MERAH
+    final bulungan = Path()
+      ..moveTo(w * 0.32, h * 0.28)
+      ..lineTo(w * 0.40, h * 0.26)
+      ..lineTo(w * 0.42, h * 0.32)
+      ..lineTo(w * 0.34, h * 0.34)
+      ..close();
+    canvas.drawPath(bulungan, Paint()..color = const Color(0xFFEF4444).withOpacity(0.8));
+
+    // Kotawaringin Timur (Kalteng) - KUNING
+    final kotawaringin = Path()
+      ..moveTo(w * 0.36, h * 0.36)
+      ..lineTo(w * 0.46, h * 0.34)
+      ..lineTo(w * 0.48, h * 0.44)
+      ..lineTo(w * 0.38, h * 0.46)
+      ..close();
+    canvas.drawPath(kotawaringin, Paint()..color = const Color(0xFFF59E0B).withOpacity(0.8));
+
+    // Surabaya (Jawa Timur) - HIJAU (Aman)
+    final surabaya = Path()
+      ..moveTo(w * 0.42, h * 0.64)
+      ..lineTo(w * 0.48, h * 0.65)
+      ..lineTo(w * 0.47, h * 0.68)
+      ..lineTo(w * 0.41, h * 0.67)
+      ..close();
+    canvas.drawPath(surabaya, Paint()..color = const Color(0xFF10B981).withOpacity(0.8));
+
+    // Denpasar (Bali) - KUNING (Waspada)
+    final denpasar = Path()
+      ..moveTo(w * 0.49, h * 0.67)
+      ..lineTo(w * 0.51, h * 0.67)
+      ..lineTo(w * 0.51, h * 0.69)
+      ..lineTo(w * 0.49, h * 0.69)
+      ..close();
+    canvas.drawPath(denpasar, Paint()..color = const Color(0xFFF59E0B).withOpacity(0.8));
+
+    // Darwin (Australia) - KUNING
+    final darwin = Path()
+      ..moveTo(w * 0.52, h * 0.76)
+      ..lineTo(w * 0.60, h * 0.74)
+      ..lineTo(w * 0.62, h * 0.80)
+      ..lineTo(w * 0.54, h * 0.82)
+      ..close();
+    canvas.drawPath(darwin, Paint()..color = const Color(0xFFF59E0B).withOpacity(0.8));
+
+    // ==========================================
+    // 3. LABEL TEKS (Opsional, kecil)
+    // ==========================================
+    void drawText(String text, Offset offset, Color color, {double fontSize = 10}) {
+      final textSpan = TextSpan(
         text: text,
-        style: TextStyle(color: color, fontSize: 11 * (zoom > 1.5 ? 1.2 : 1.0), fontWeight: FontWeight.bold),
+        style: TextStyle(color: color, fontSize: fontSize, fontWeight: FontWeight.bold),
       );
-      textPainter.layout();
+      final textPainter = TextPainter(
+        text: textSpan,
+        textDirection: TextDirection.ltr,
+      )..layout();
       textPainter.paint(canvas, offset);
     }
 
-    drawLabel("Kalimantan\n(Siaga Red)", Offset(size.width * 0.28, size.height * 0.45), Colors.white);
-    drawLabel("Sulawesi\n(Waspada)", Offset(size.width * 0.54, size.height * 0.48), Colors.white);
-    drawLabel("Jawa Timur\n(Waspada)", Offset(size.width * 0.35, size.height * 0.71), Colors.white);
-    drawLabel("Bali\n(Aman)", Offset(size.width * 0.59, size.height * 0.73), Colors.white);
+    // Label di area yang diwarnai
+    drawText('Bulungan', Offset(w * 0.34, h * 0.30), Colors.white);
+    drawText('Kotawaringin', Offset(w * 0.38, h * 0.40), Colors.white);
+    drawText('Surabaya', Offset(w * 0.42, h * 0.66), Colors.white, fontSize: 8);
+    drawText('Darwin', Offset(w * 0.54, h * 0.78), Colors.white);
   }
 
   @override
-  bool shouldRepaint(covariant AsiaPacificProMapPainter oldDelegate) {
-    return oldDelegate.zoom != zoom || oldDelegate.warnings != warnings;
-  }
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
 // ================== 3. UI LAYAR CHAT ==================
@@ -1638,6 +1486,7 @@ class _ChatScreenState extends State<ChatScreen> {
   final TextEditingController _controller = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   bool _isLoading = false;
+  
   bool _isLastUsingFallback = true; 
 
   @override
@@ -1696,7 +1545,6 @@ class _ChatScreenState extends State<ChatScreen> {
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
 
     return Scaffold(
-      backgroundColor: const Color(0xFF0F172A),
       resizeToAvoidBottomInset: true,
       appBar: AppBar(
         title: Row(
@@ -1711,22 +1559,25 @@ class _ChatScreenState extends State<ChatScreen> {
               margin: const EdgeInsets.only(right: 8),
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
-                color: const Color(0xFF0F172A),
+                color: Colors.black.withOpacity(0.2),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: _isLastUsingFallback ? Colors.redAccent : Colors.greenAccent,
-                  width: 1.5,
-                ),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Container(
-                    width: 8,
-                    height: 8,
+                    width: 10,
+                    height: 10,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
                       color: _isLastUsingFallback ? Colors.redAccent : Colors.greenAccent,
+                      boxShadow: [
+                        BoxShadow(
+                          color: (_isLastUsingFallback ? Colors.redAccent : Colors.greenAccent).withOpacity(0.6),
+                          blurRadius: 6,
+                          spreadRadius: 2,
+                        )
+                      ],
                     ),
                   ),
                   const SizedBox(width: 6),
@@ -1739,8 +1590,7 @@ class _ChatScreenState extends State<ChatScreen> {
             ),
           ],
         ),
-        backgroundColor: const Color(0xFF1E293B),
-        elevation: 0,
+        backgroundColor: const Color(0xFF4A90E2),
         iconTheme: const IconThemeData(color: Colors.white),
       ),
       body: Column(
@@ -1760,20 +1610,17 @@ class _ChatScreenState extends State<ChatScreen> {
                     constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75),
                     decoration: BoxDecoration(
                       color: msg.isUser 
-                          ? const Color(0xFF38BDF8) 
-                          : const Color(0xFF1E293B),
+                          ? const Color(0xFF4A90E2) 
+                          : const Color(0xFFF1F5F9),
                       borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                        color: msg.isUser 
-                            ? const Color(0xFF38BDF8) 
-                            : (!msg.isUser && msg.isUsingFallback ? Colors.redAccent.withOpacity(0.4) : const Color(0xFF334155)),
-                        width: 1,
-                      ),
+                      border: (!msg.isUser && msg.isUsingFallback)
+                          ? Border.all(color: Colors.redAccent.withOpacity(0.4), width: 1.5)
+                          : null,
                     ),
                     child: Text(
                       msg.text,
                       style: TextStyle(
-                        color: msg.isUser ? const Color(0xFF0F172A) : Colors.white70,
+                        color: msg.isUser ? Colors.white : const Color(0xFF2C3E50),
                         fontSize: 14,
                         height: 1.4,
                       ),
@@ -1786,15 +1633,15 @@ class _ChatScreenState extends State<ChatScreen> {
           if (_isLoading)
             const Padding(
               padding: EdgeInsets.all(8.0),
-              child: LinearProgressIndicator(color: Color(0xFF38BDF8), backgroundColor: Color(0xFF1E293B)),
+              child: LinearProgressIndicator(color: Color(0xFF4A90E2)),
             ),
           Padding(
             padding: EdgeInsets.only(bottom: bottomInset),
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               decoration: const BoxDecoration(
-                color: Color(0xFF1E293B),
-                border: Border(top: BorderSide(color: Color(0xFF334155))),
+                color: Colors.white,
+                border: Border(top: BorderSide(color: Color(0xFFE2E8F0))),
               ),
               child: Row(
                 children: [
@@ -1802,17 +1649,15 @@ class _ChatScreenState extends State<ChatScreen> {
                     child: TextField(
                       controller: _controller,
                       onSubmitted: (_) => _sendMessage(),
-                      style: const TextStyle(color: Colors.white),
                       decoration: const InputDecoration(
                         hintText: 'Ketik pesan...',
-                        hintStyle: TextStyle(color: Colors.white54),
                         border: InputBorder.none,
                       ),
                     ),
                   ),
                   IconButton(
                     onPressed: _sendMessage,
-                    icon: const Icon(Icons.send, color: Color(0xFF38BDF8)),
+                    icon: const Icon(Icons.send, color: Color(0xFF4A90E2)),
                   ),
                 ],
               ),
