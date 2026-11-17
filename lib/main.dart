@@ -455,11 +455,6 @@ class WeatherUtils {
   }
 
   static Color getWeatherColor(int code) {
-    if (code == 0) return const Color(0xFF1E293B);
-    if (code <= 3) return const Color(0xFF1E293B);
-    if (code <= 48) return const Color(0xFF1E293B);
-    if (code <= 67) return const Color(0xFF1E293B);
-    if (code <= 82) return const Color(0xFF1E293B);
     return const Color(0xFF1E293B);
   }
 
@@ -597,7 +592,6 @@ class _WeatherScreenState extends State<WeatherScreen> {
   List<CityLocation> _searchResults = [];
   bool _isSearching = false;
 
-  // Mock Warnings Database with Time Windows
   late List<WeatherWarning> _warnings;
 
   @override
@@ -730,7 +724,6 @@ class _WeatherScreenState extends State<WeatherScreen> {
         (w) => _displayCityName.toLowerCase().contains(w.regionName.split(',').first.trim().toLowerCase()) && w.isActive,
       );
     } catch (_) {
-      // Return a default safe or matching active warning if available
       try {
         return _warnings.firstWhere((w) => w.isActive);
       } catch (_) {
@@ -851,7 +844,6 @@ class _WeatherScreenState extends State<WeatherScreen> {
   }
 
   Widget _buildContent(DailyForecast today, HourlyForecast? currentHour, int activeRainProbability, WeatherWarning? activeWarning) {
-    // Determine dynamic warning banner color scheme
     final warningColor = activeWarning?.level == WarningLevel.danger
         ? Colors.redAccent
         : activeWarning?.level == WarningLevel.warning
@@ -874,9 +866,6 @@ class _WeatherScreenState extends State<WeatherScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ==========================================
-            // HEADER & OVERFLOW MENU
-            // ==========================================
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -940,10 +929,6 @@ class _WeatherScreenState extends State<WeatherScreen> {
               ],
             ),
             const SizedBox(height: 20),
-
-            // ==========================================
-            // DASHBOARD SYNCED WARNING BANNER (Modern & Lightweight)
-            // ==========================================
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(16),
@@ -988,17 +973,14 @@ class _WeatherScreenState extends State<WeatherScreen> {
                 ],
               ),
             ),
-
             const SizedBox(height: 20),
             _buildModelSelector(),
             const SizedBox(height: 20),
             _buildCurrentWeather(today!, currentHour),
             const SizedBox(height: 20),
             _buildUmbrellaRecommendation(activeRainProbability),
-            
             const SizedBox(height: 20),
             _buildHourlySection(),
-
             const SizedBox(height: 20),
             const Text('Prakiraan 10 Hari', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600)),
             const SizedBox(height: 12),
@@ -1654,7 +1636,8 @@ class _ChatScreenState extends State<ChatScreen> {
                     child: Text(
                       msg.text,
                       style: TextStyle(
-                        color: msg.isUser ? const Color(0xFF0F172A) : Colors.white90,
+                        // PERBAIKAN: Mengubah Colors.white90 menjadi Colors.white70 agar valid di Flutter
+                        color: msg.isUser ? const Color(0xFF0F172A) : Colors.white70,
                         fontSize: 14,
                         height: 1.4,
                       ),
